@@ -48,16 +48,16 @@ python -m http.server 8000 --directory docs
 
 ## Логотип
 
-Логотип колледжа лежит в `web/assets/`: `logo.png` — для шапки, `favicon.png` —
+Логотип колледжа лежит в `docs/assets/`: `logo.png` — для шапки, `favicon.png` —
 для вкладки браузера. Обе картинки собраны из исходника скриптом:
 
 ```bash
-python tools/make_logo.py "web/assets/Логотип 3. png.png"
+python tools/make_logo.py "brand/Логотип 3. png.png"
 ```
 
 Он обрезает прозрачные поля и уменьшает изображение — исходник на несколько
 мегабайт в шапке не нужен. Если файлов нет, показывается векторная заглушка
-из `web/index.html`.
+из `docs/index.html`.
 
 ## Установка как приложения
 
@@ -76,7 +76,7 @@ python tools/make_logo.py "web/assets/Логотип 3. png.png"
 того, как сайт получит адрес с сертификатом. На iPhone это ограничение
 не действует. Сам сайт по http работает нормально.
 
-За установку отвечают `web/manifest.webmanifest` и `web/sw.js`.
+За установку отвечают `docs/manifest.webmanifest` и `docs/sw.js`.
 Service worker ещё даёт офлайн-доступ: последнее открытое расписание
 покажется и без сети. После крупных изменений сайта поднимите номер
 в `const CACHE = 'umpk-v1'`, чтобы старые файлы гарантированно вычистились.
@@ -97,9 +97,9 @@ Service worker ещё даёт офлайн-доступ: последнее о�
 его в кэше нет, и страница подтянется заново. Убедиться, что версия свежая,
 можно на странице «О расписании»: там есть строка «Версия сайта».
 
-Ссылки на `styles.css` и `app.js` в `index.html` помечены `?v=2`. Номер
+Ссылки на `styles.css` и `app.js` в `docs/index.html` помечены `?v=2`. Номер
 менять не обязательно, но если понадобится наверняка выбить старую версию
-из кэша всех устройств — увеличьте его и там, и в `web/sw.js`.
+из кэша всех устройств — увеличьте его и там, и в `docs/sw.js`.
 
 ## Откуда берутся данные
 
@@ -219,16 +219,25 @@ python tools/check.py --download # предварительно скачав и�
 ## Состав проекта
 
 ```
-app/config.py    настройки
-app/cloud.py     скачивание из облака Mail.ru
-app/parser.py    разбор xlsx в список занятий
-app/store.py     кэш, фоновое обновление, выборки по датам
-app/main.py      HTTP-API и отдача сайта
-web/             сайт: index.html, styles.css, app.js, assets/
-web/manifest.webmanifest  описание приложения для установки
-web/sw.js        service worker: офлайн-доступ и установка
-data/raw/        последние скачанные таблицы
-data/schedule.json  разобранное расписание
-tools/check.py   диагностика разбора
-tools/make_logo.py  уменьшение логотипа под шапку и вкладку
+app/config.py       настройки: ссылка на облако, исправления опечаток
+app/cloud.py        скачивание таблиц из облака Mail.ru
+app/parser.py       разбор xlsx в список занятий
+tools/build_data.py сборка docs/data/schedule.json — им же пользуется GitHub Actions
+tools/check.py      диагностика разбора
+tools/make_logo.py  подготовка картинок логотипа
+
+docs/               то, что публикуется на GitHub Pages
+  index.html        разметка и шаблоны экранов
+  styles.css        оформление, светлая и тёмная темы
+  app.js            вся логика сайта
+  data/schedule.json  расписание, которое читает сайт
+  assets/           логотип и иконки приложения
+  CNAME             домен umpksch.ru
+  manifest.webmanifest, sw.js  установка как приложения и работа без сети
+
+brand/              исходники логотипа, не публикуются
+data/               скачанные таблицы и кэш, в репозиторий не попадают
+
+app/main.py, app/store.py  необязательный локальный сервер с живым API;
+                           сайту на GitHub Pages не нужны
 ```
