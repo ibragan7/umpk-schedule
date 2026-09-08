@@ -1,0 +1,46 @@
+name: Обновление расписания
+
+# Раз в час скачиваем таблицы из облака колледжа, разбираем их и коммитим
+# docs/data/schedule.json. GitHub Pages раздаёт этот файл, сервер не нужен.
+on:
+  schedule:
+    # Каждый час в 20 минут. Точное время GitHub не гарантирует: на бесплатном
+    # тарифе запуск может задержаться на несколько минут — для расписания
+    # это несущественно.
+    - cron: "20 * * * *"
+  workflow_dispatch:        # кнопка «Run workflow» для обновления вручную
+
+permissions:
+  contents: write           # нужно, чтобы коммитить обновлённый файл
+
+concurrency:
+  group: schedule-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установить зависимости
+        run: pip install openpyxl
+
+      - name: Собрать расписание
+        run: python tools/build_data.py
+
+      - name: Закоммитить, если расписание изменилось
+        run: |
+          if git diff --quiet -- docs/data/schedule.json; then
+            echo "Расписание не изменилось — коммит не нужен."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/schedule.json
+          git commit -m "Обновление расписания $(date -u '+%d.%m.%Y %H:%M UTC')"
+          git push

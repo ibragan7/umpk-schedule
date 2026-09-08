@@ -1,0 +1,22 @@
+{
+  "name": "Расписание занятий УМПК",
+  "short_name": "Расписание УМПК",
+  "description": "Расписание занятий Уфимского многопрофильного профессионального колледжа",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f9",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Я студент", "url": "./#/student" },
+    { "name": "Я преподаватель", "url": "./#/teacher" }
+  ]
+}
