@@ -1,0 +1,10 @@
+# В репозитории держим переводы строк в стиле Unix: файлы читают и Windows,
+# и линуксовые машины GitHub Actions.
+* text=auto eol=lf
+
+# Батники запускает Windows — им нужны CRLF.
+*.bat text eol=crlf
+
+# Картинки и таблицы не трогаем.
+*.png binary
+*.xlsx binary
