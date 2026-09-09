@@ -41,12 +41,10 @@ function addDays(date, days) {
   return copy;
 }
 
-/** «8 сентября» — подпись вкладки. */
 function dayLabel(date) {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
-/** Понедельник той недели, в которую попадает дата. */
 function mondayOf(date) {
   return addDays(date, -((date.getDay() + 6) % 7));
 }
@@ -124,7 +122,6 @@ function publishedWeeks() {
     });
 }
 
-/** Расписание группы или преподавателя на несколько дней подряд. */
 function scheduleFor(kind, name, start, days) {
   const forGroup = kind === 'group';
   const source = (forGroup ? App.data.byGroup : App.data.byTeacher).get(name) || [];
@@ -373,12 +370,9 @@ function renderHome() {
       : 'Расписание не загрузилось — обновите страницу.';
   }
 
-  // Последние открытые группы и преподаватели — вперемешку, чтобы вернуться
-  // к своему расписанию можно было прямо с главной.
   fillRecent(document.getElementById('home-recent'), readRecent());
 }
 
-/** Заполняет блок «Недавние»; если списка нет — блок остаётся скрытым. */
 function fillRecent(box, items) {
   if (!box || !items.length) return;
   box.querySelector('.recent__items').replaceChildren(...items.map((item) => {
@@ -515,7 +509,6 @@ async function renderSchedule(kind, name) {
   });
 
   const load = () => {
-    // На вкладках вместо «Сегодня» и «Завтра» — сами даты.
     const now = new Date();
     tabs.forEach((tab) => {
       if (tab.dataset.view === 'today') tab.textContent = dayLabel(now);
@@ -578,7 +571,6 @@ async function renderSchedule(kind, name) {
   load();
 }
 
-/** Ряд кнопок «1 неделя», «2 неделя» … — по одной на каждую выложенную неделю. */
 function renderWeekPicker(box, list, active, onPick) {
   box.replaceChildren(...list.map((item, index) => {
     const button = el('button', `weekpick__btn${index === active ? ' is-active' : ''}`);
@@ -675,7 +667,6 @@ function drawDay(day, title, kind) {
   const font = (size, weight = 400) =>
     `${weight} ${size}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
 
-  // Переносим длинные названия дисциплин по словам.
   const wrap = (text, maxWidth, size, weight) => {
     ctx.font = font(size, weight);
     const words = String(text).split(' ');
@@ -839,7 +830,6 @@ async function shareDay(day, title, kind) {
   return 'downloaded';
 }
 
-// Подписи к отметкам, которые проставляет сборка расписания.
 const MARKS = {
   new: { text: 'новая', cls: 'badge--new' },
   changed: { text: 'изменилась', cls: 'badge--changed' },
@@ -856,7 +846,6 @@ function renderLesson(lesson, nowMinutes, kind) {
   const row = el('div', `lesson${isNow ? ' lesson--now' : ''}`
     + `${isDone ? ' lesson--done' : ''}${gone ? ' lesson--removed' : ''}`);
 
-  // Слева столбиком: начало, конец, номер пары («Разговоры о важном» — без номера).
   const [start, end] = lesson.time.split(/[-–—]/).map((part) => part.trim());
   const slot = el('div', 'lesson__slot');
   slot.append(el('span', 'lesson__start', start));

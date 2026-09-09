@@ -42,7 +42,6 @@ def _fetch(url: str) -> bytes:
 
 
 def list_files(weblink: str = CLOUD_PUBLIC_LINK, recursive: bool = False) -> list[CloudFile]:
-    """Отдаёт список файлов публичной папки (по умолчанию — без вложенных)."""
     raw = _fetch(API_LIST.format(wl=urllib.parse.quote(weblink, safe="")))
     payload = json.loads(raw)
     files: list[CloudFile] = []

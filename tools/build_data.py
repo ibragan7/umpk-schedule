@@ -134,7 +134,6 @@ def mark_changes(payload: dict, old: dict) -> dict:
             lesson["mark_on"] = today.isoformat()
             changed += 1
         elif before.get("mark") and before.get("mark_on", "") >= fresh:
-            # Отметка со старой сборки ещё не истекла — переносим.
             lesson["mark"] = before["mark"]
             lesson["mark_on"] = before["mark_on"]
 
@@ -145,7 +144,6 @@ def mark_changes(payload: dict, old: dict) -> dict:
         entry["mark_on"] = today.isoformat()
         payload["removed"].append(entry)
 
-    # Снятые пары с прошлых сборок держим, пока не истечёт срок.
     for entry in old.get("removed", []):
         if entry.get("mark_on", "") >= fresh and slot_of(entry) not in {
             slot_of(l) for l in payload["lessons"]
