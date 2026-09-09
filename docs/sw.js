@@ -12,8 +12,8 @@ const NETWORK_TIMEOUT = 5000;
 const SHELL = [
   './',
   'index.html',
-  'styles.css?v=2',
-  'app.js?v=2',
+  'styles.css?v=3',
+  'app.js?v=3',
   'manifest.webmanifest',
   // Само расписание: без него офлайн открылся бы пустой сайт.
   'data/schedule.json',
