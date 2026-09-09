@@ -961,7 +961,7 @@ function renderInfo() {
   const about = el('div', 'info__block');
   about.append(el('h2', null, 'Откуда берутся данные'));
   about.append(el('p', null,
-    'Раз в час GitHub Actions скачивает таблицы расписания из публичной папки облака ' +
+    'Каждые полчаса GitHub Actions скачивает таблицы расписания из публичной папки облака ' +
     'колледжа, разбирает их и обновляет файл, который читает сайт. Сервер для этого не нужен.'));
   if (meta.weeks && meta.weeks.length) {
     const weeks = meta.weeks.map((w) => `${w.label} (${w.week}-я)`).join(', ');
@@ -972,7 +972,7 @@ function renderInfo() {
   const rows = [
     ['Расписание собрано', meta.built_on
       ? new Date(meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU') : '—'],
-    ['Периодичность', 'раз в час'],
+    ['Периодичность', 'каждые полчаса'],
     ['Групп', String(meta.groups.length)],
     ['Преподавателей', String(meta.teachers.length)],
     ['Текущая неделя', `${meta.current_week}-я`],
