@@ -386,6 +386,26 @@ button { font: inherit; }
 }
 .schedule__name { margin: 0; font-size: 26px; font-weight: 800; color: var(--blue); }
 
+/* кнопка «Поделиться» — отдаёт расписание дня картинкой */
+.share {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-left: auto;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.share svg {
+  width: 16px; height: 16px;
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.share:hover:not(:disabled) { color: var(--blue); border-color: var(--blue-600); }
+.share:disabled { opacity: .6; cursor: default; }
+
 .badge {
   display: inline-block;
   padding: 5px 11px;
@@ -396,6 +416,24 @@ button { font: inherit; }
   color: var(--blue);
 }
 .badge--week { background: var(--green-100); color: var(--green-ink); }
+.badge--sub { background: var(--sub-bg); color: var(--sub-ink); }
+.badge--note { background: var(--note-bg); color: var(--note-ink); }
+
+/* отметки о правках расписания */
+.badge--new { background: var(--green-100); color: var(--green-ink); }
+.badge--changed { background: var(--sub-bg); color: var(--sub-ink); }
+.badge--removed { background: var(--note-bg); color: var(--note-ink); }
+
+/* пара, которую сняли: её больше нет в сетке, показываем зачёркнутой */
+.lesson--removed { background: var(--done-bg); }
+.lesson--removed .lesson__subject,
+.lesson--removed .lesson__start,
+.lesson--removed .lesson__end {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.lesson--removed .lesson__meta { color: var(--ink-3); }
+.lesson--removed .lesson__meta .badge { text-decoration: none; }
 
 /* вкладки «дата · дата · неделя» */
 .tabs {

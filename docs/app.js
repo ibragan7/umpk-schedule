@@ -67,13 +67,23 @@ async function loadData() {
   const data = await api(DATA_URL);
   data.byGroup = new Map();
   data.byTeacher = new Map();
+  data.removedByGroup = new Map();
+  data.removedByTeacher = new Map();
+
+  const put = (map, key, lesson) => {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(lesson);
+  };
+
   for (const lesson of data.lessons) {
-    if (!data.byGroup.has(lesson.group)) data.byGroup.set(lesson.group, []);
-    data.byGroup.get(lesson.group).push(lesson);
-    if (lesson.teacher) {
-      if (!data.byTeacher.has(lesson.teacher)) data.byTeacher.set(lesson.teacher, []);
-      data.byTeacher.get(lesson.teacher).push(lesson);
-    }
+    put(data.byGroup, lesson.group, lesson);
+    if (lesson.teacher) put(data.byTeacher, lesson.teacher, lesson);
+  }
+  // Пары, снятые с расписания: их больше нет, но несколько дней показываем
+  // зачёркнутыми — иначе человек не заметит, что занятие отменили.
+  for (const lesson of data.removed || []) {
+    put(data.removedByGroup, lesson.group, lesson);
+    if (lesson.teacher) put(data.removedByTeacher, lesson.teacher, lesson);
   }
   return data;
 }
@@ -116,24 +126,27 @@ function publishedWeeks() {
 
 /** Расписание группы или преподавателя на несколько дней подряд. */
 function scheduleFor(kind, name, start, days) {
-  const index = kind === 'group' ? App.data.byGroup : App.data.byTeacher;
-  const source = index.get(name) || [];
+  const forGroup = kind === 'group';
+  const source = (forGroup ? App.data.byGroup : App.data.byTeacher).get(name) || [];
+  const gone = (forGroup ? App.data.removedByGroup : App.data.removedByTeacher).get(name) || [];
+
+  const onDay = (list, weekday, week) => list
+    .filter((l) => l.weekday === weekday && (l.week === 0 || l.week === week))
+    .sort((a, b) => a.pair - b.pair || (a.subgroup || 0) - (b.subgroup || 0));
 
   const result = [];
   for (let offset = 0; offset < days; offset++) {
     const day = addDays(start, offset);
     const weekday = ((day.getDay() + 6) % 7) + 1;      // 1 = понедельник
     const week = weekNumber(day);
-    const lessons = weekday === 7 ? [] : source
-      .filter((l) => l.weekday === weekday && (l.week === 0 || l.week === week))
-      .sort((a, b) => a.pair - b.pair || (a.subgroup || 0) - (b.subgroup || 0));
     result.push({
       date: isoDate(day),
       weekday,
       weekday_name: WEEKDAY_NAMES[weekday],
       date_label: dayLabel(day),
       week,
-      lessons,
+      lessons: weekday === 7 ? [] : onDay(source, weekday, week),
+      removed: weekday === 7 ? [] : onDay(gone, weekday, week),
     });
   }
   return { kind, name, found: source.length > 0, days: result };
@@ -482,7 +495,24 @@ async function renderSchedule(kind, name) {
   const tabs = [...App.root.querySelectorAll('.tab')];
   const weekpick = document.getElementById('weekpick');
   const days = document.getElementById('days');
+  const shareButton = document.getElementById('share-btn');
+  const shareText = shareButton.querySelector('.share__text');
+  let shareDayData = null;
   let view = sessionStorage.getItem('umpk.view') || 'today';
+
+  shareButton.addEventListener('click', async () => {
+    if (!shareDayData || shareButton.disabled) return;
+    shareButton.disabled = true;
+    shareText.textContent = 'Готовим…';
+    try {
+      const how = await shareDay(shareDayData, name, kind);
+      shareText.textContent = how === 'downloaded' ? 'Сохранено' : 'Поделиться';
+    } catch (error) {
+      shareText.textContent = 'Не вышло';
+      console.error('Поделиться не получилось:', error);
+    }
+    setTimeout(() => { shareText.textContent = 'Поделиться'; shareButton.disabled = false; }, 2500);
+  });
 
   const load = () => {
     // На вкладках вместо «Сегодня» и «Завтра» — сами даты.
@@ -518,6 +548,11 @@ async function renderSchedule(kind, name) {
     try {
       const data = scheduleFor(kind, name, from, count);
       renderDays(days, data, view);
+
+      // Картинкой отправляем один день: неделя вышла бы длинной простынёй,
+      // которую в переписке всё равно не разглядеть.
+      shareDayData = count === 1 && data.found ? data.days[0] : null;
+      shareButton.hidden = !shareDayData;
 
       // Раз в минуту перерисовываем то же самое: меняются отметки
       // «идёт сейчас» и «пара прошла». А если страницу оставили открытой
@@ -588,7 +623,8 @@ function renderDay(day, isToday, kind) {
   if (isToday) head.append(el('span', 'day__today', 'сегодня'));
   card.append(head);
 
-  if (!day.lessons.length) {
+  const removed = day.removed || [];
+  if (!day.lessons.length && !removed.length) {
     card.append(el('div', 'day__empty',
       day.weekday === 7 ? 'Воскресенье — выходной' : 'Занятий нет'));
     return card;
@@ -597,6 +633,11 @@ function renderDay(day, isToday, kind) {
   const nowMinutes = isToday ? currentMinutes() : -1;
   for (const lesson of day.lessons) {
     card.append(renderLesson(lesson, nowMinutes, kind));
+  }
+  // Снятые пары показываем последними и зачёркнутыми: их уже нет в сетке,
+  // но человеку важно увидеть, что занятие отменили.
+  for (const lesson of removed) {
+    card.append(renderLesson(lesson, -1, kind));
   }
   return card;
 }
@@ -616,13 +657,204 @@ function lessonRange(time) {
   ];
 }
 
+/* ------------------------------------------------- картинка на день ---- */
+
+/**
+ * Рисует расписание дня картинкой, чтобы отправить в переписку.
+ *
+ * Рисуем сами на canvas, а не фотографируем страницу: так картинка выходит
+ * одинаковой на всех устройствах и не тянет за собой стороннюю библиотеку.
+ * Размер удваиваем — иначе на телефонах текст выйдет мыльным.
+ */
+function drawDay(day, title, kind) {
+  const S = 2;                       // множитель чёткости
+  const W = 720;                     // ширина картинки в «обычных» точках
+  const PAD = 36;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const font = (size, weight = 400) =>
+    `${weight} ${size}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+
+  // Переносим длинные названия дисциплин по словам.
+  const wrap = (text, maxWidth, size, weight) => {
+    ctx.font = font(size, weight);
+    const words = String(text).split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const next = line ? line + ' ' + word : word;
+      if (ctx.measureText(next).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+
+  const lessons = [...day.lessons, ...(day.removed || [])];
+  const textLeft = PAD + 96;
+  const textWidth = W - textLeft - PAD;
+
+  // Первый проход — считаем высоту, чтобы не резать содержимое.
+  const MARK_TEXT = { new: 'новая', changed: 'изменилась', removed: 'снята' };
+  const MARK_COLOR = { new: '#1f6e2b', changed: '#a35b00', removed: '#b3261e' };
+
+  const rows = lessons.map((l) => {
+    const subject = wrap(l.subject, textWidth, 21, 700);
+    const meta = [
+      kind === 'teacher' ? l.group : l.teacher,
+      l.room && 'ауд. ' + l.room,
+      l.subgroup && `${l.subgroup}-я подгруппа`,
+    ].filter(Boolean).join('   ');
+    const mark = MARK_TEXT[l.mark] || '';
+    return {
+      lesson: l, subject, meta, mark,
+      markColor: MARK_COLOR[l.mark],
+      height: subject.length * 27 + (meta || mark ? 26 : 4) + 22,
+    };
+  });
+
+  const headHeight = 132;
+  const footHeight = 54;
+  const bodyHeight = rows.length
+    ? rows.reduce((sum, r) => sum + r.height, 0)
+    : 70;
+  const H = headHeight + bodyHeight + footHeight;
+
+  canvas.width = W * S;
+  canvas.height = H * S;
+  ctx.scale(S, S);
+
+  // Фон и шапка — всегда светлые: картинку смотрят в чужой переписке.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1a4ed0';
+  ctx.fillRect(0, 0, W, 8);
+
+  ctx.fillStyle = '#17233c';
+  ctx.font = font(30, 800);
+  ctx.fillText(title, PAD, 62);
+
+  ctx.fillStyle = '#41506d';
+  ctx.font = font(19);
+  ctx.fillText(`${day.weekday_name}, ${day.date_label} · ${day.week}-я неделя`, PAD, 94);
+
+  ctx.strokeStyle = '#e3e8f2';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, 114);
+  ctx.lineTo(W - PAD, 114);
+  ctx.stroke();
+
+  let y = headHeight;
+  if (!rows.length) {
+    ctx.fillStyle = '#7b88a1';
+    ctx.font = font(20);
+    ctx.fillText(day.weekday === 7 ? 'Воскресенье — выходной' : 'Занятий нет', PAD, y + 20);
+  }
+
+  for (const row of rows) {
+    const [start, end] = row.lesson.time.split(/[-–—]/).map((p) => p.trim());
+    const faded = row.lesson.mark === 'removed';
+
+    ctx.fillStyle = faded ? '#7b88a1' : '#17233c';
+    ctx.font = font(21, 700);
+    ctx.fillText(start, PAD, y + 21);
+    ctx.fillStyle = '#7b88a1';
+    ctx.font = font(17);
+    if (end) ctx.fillText(end, PAD, y + 44);
+
+    ctx.fillStyle = faded ? '#7b88a1' : '#17233c';
+    ctx.font = font(21, 700);
+    let ty = y + 21;
+    for (const line of row.subject) {
+      ctx.fillText(line, textLeft, ty);
+      if (faded) {                    // зачёркиваем снятую пару
+        const w = ctx.measureText(line).width;
+        ctx.fillRect(textLeft, ty - 7, w, 1.5);
+      }
+      ty += 27;
+    }
+
+    if (row.meta || row.mark) {
+      ctx.font = font(17);
+      let mx = textLeft;
+      if (row.meta) {
+        ctx.fillStyle = '#41506d';
+        ctx.fillText(row.meta, mx, ty + 2);
+        mx += ctx.measureText(row.meta).width + 16;
+      }
+      if (row.mark) {                 // отметку красим, иначе теряется в сером
+        ctx.fillStyle = row.markColor;
+        ctx.font = font(17, 700);
+        ctx.fillText(row.mark, mx, ty + 2);
+      }
+    }
+
+    y += row.height;
+    ctx.strokeStyle = '#eef1f7';
+    ctx.beginPath();
+    ctx.moveTo(PAD, y - 11);
+    ctx.lineTo(W - PAD, y - 11);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#7b88a1';
+  ctx.font = font(16);
+  ctx.fillText('umpksch.ru · расписание УМПК', PAD, H - 22);
+
+  return canvas;
+}
+
+/** Отдаёт картинку в системное «Поделиться», а где его нет — просто скачивает. */
+async function shareDay(day, title, kind) {
+  const canvas = drawDay(day, title, kind);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('не удалось нарисовать картинку');
+
+  const safe = `${title} ${day.date}`.replace(/[^\wа-яёА-ЯЁ\- ]+/gi, '').trim();
+  const file = new File([blob], `${safe}.png`, { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: `${title} — ${day.date_label}` });
+      return 'shared';
+    } catch (error) {
+      if (error && error.name === 'AbortError') return 'cancelled';   // человек закрыл окно
+      // Не получилось поделиться — уходим на скачивание.
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = el('a');
+  link.href = url;
+  link.download = file.name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return 'downloaded';
+}
+
+// Подписи к отметкам, которые проставляет сборка расписания.
+const MARKS = {
+  new: { text: 'новая', cls: 'badge--new' },
+  changed: { text: 'изменилась', cls: 'badge--changed' },
+  removed: { text: 'снята', cls: 'badge--removed' },
+};
+
 function renderLesson(lesson, nowMinutes, kind) {
   // nowMinutes < 0 — день не сегодняшний, отмечать нечего.
   const range = lessonRange(lesson.time);
-  const isNow = range && nowMinutes >= range[0] && nowMinutes <= range[1];
-  const isDone = range && nowMinutes >= 0 && nowMinutes > range[1];
+  const gone = lesson.mark === 'removed';
+  const isNow = !gone && range && nowMinutes >= range[0] && nowMinutes <= range[1];
+  const isDone = !gone && range && nowMinutes >= 0 && nowMinutes > range[1];
 
-  const row = el('div', `lesson${isNow ? ' lesson--now' : ''}${isDone ? ' lesson--done' : ''}`);
+  const row = el('div', `lesson${isNow ? ' lesson--now' : ''}`
+    + `${isDone ? ' lesson--done' : ''}${gone ? ' lesson--removed' : ''}`);
 
   // Слева столбиком: начало, конец, номер пары («Разговоры о важном» — без номера).
   const [start, end] = lesson.time.split(/[-–—]/).map((part) => part.trim());
@@ -641,6 +873,16 @@ function renderLesson(lesson, nowMinutes, kind) {
   if (lesson.room) meta.append(el('span', 'lesson__room', lesson.room));
   if (lesson.subgroup) meta.append(el('span', 'badge badge--sub', `${lesson.subgroup}-я подгруппа`));
   if (lesson.note) meta.append(el('span', 'badge badge--note', lesson.note));
+
+  const mark = MARKS[lesson.mark];
+  if (mark) {
+    const badge = el('span', `badge ${mark.cls}`, mark.text);
+    if (lesson.mark_on) {
+      const when = new Date(lesson.mark_on + 'T00:00:00');
+      badge.title = `${mark.text} ${dayLabel(when)}`;
+    }
+    meta.append(badge);
+  }
   if (meta.childNodes.length) body.append(meta);
 
   row.append(body);

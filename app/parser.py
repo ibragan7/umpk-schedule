@@ -77,6 +77,14 @@ class Lesson:
         return asdict(self)
 
 
+def natural_group_key(name: str) -> tuple:
+    """Сортировка групп: сперва специальность, затем курс («1 БД» < «2 БД»)."""
+    parts = name.split(maxsplit=1)
+    if len(parts) == 2 and parts[0].isdigit():
+        return (parts[1].lower(), int(parts[0]))
+    return (name.lower(), 0)
+
+
 def _clean(value) -> str:
     if value is None:
         return ""
