@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v3';
+const SITE_VERSION = 'umpk-v4';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -195,34 +195,45 @@ const routeFor = (kind, name) =>
 
 /* ------------------------------------------------------------- шапка ---- */
 
-const burger = document.getElementById('burger');
-const nav = document.getElementById('nav');
-
-burger.addEventListener('click', () => {
-  const open = nav.classList.toggle('is-open');
-  burger.setAttribute('aria-expanded', String(open));
-});
 document.getElementById('year').textContent = String(new Date().getFullYear());
 
 /* --------------------------------------------------------------- тема --- */
 
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+/** Выбранная человеком тема или null, пока он не выбирал. */
 function storedTheme() {
-  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === 'light' || saved === 'dark' ? saved : null;
+  } catch { return null; }
+}
+
+/** Тема, которая сейчас на экране: свой выбор, а пока его нет — системная. */
+function activeTheme() {
+  return storedTheme() || (systemDark.matches ? 'dark' : 'light');
 }
 
 function applyTheme(choice) {
   const root = document.documentElement;
-  if (choice === 'light' || choice === 'dark') root.setAttribute('data-theme', choice);
-  else root.removeAttribute('data-theme');
+  if (choice) {
+    root.setAttribute('data-theme', choice);
+    try { localStorage.setItem(THEME_KEY, choice); } catch { /* приватный режим */ }
+  } else {
+    root.removeAttribute('data-theme');
+  }
 
-  try {
-    if (choice === 'system') localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, choice);
-  } catch { /* приватный режим */ }
-
-  document.querySelectorAll('.theme__btn').forEach((button) => {
-    button.classList.toggle('is-active', button.dataset.themeChoice === choice);
-  });
+  // На кнопке — та тема, в которую она переключит: так понятно, что будет.
+  // У SVG нет свойства hidden, поэтому переключаем именно атрибут.
+  const dark = activeTheme() === 'dark';
+  const button = document.getElementById('theme-toggle');
+  if (button) {
+    button.querySelector('.theme-toggle__sun').toggleAttribute('hidden', !dark);
+    button.querySelector('.theme-toggle__moon').toggleAttribute('hidden', dark);
+    const label = dark ? 'Включить светлую тему' : 'Включить тёмную тему';
+    button.setAttribute('aria-label', label);
+    button.title = label;
+  }
 
   // Цвет строки состояния в мобильных браузерах — под фон шапки.
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -232,24 +243,17 @@ function applyTheme(choice) {
   }
 }
 
-// Кнопки темы и установки живут в двух местах и перерисовываются,
-// поэтому слушаем клики на документе, а не на конкретных элементах.
 document.addEventListener('click', (event) => {
-  const themeButton = event.target.closest('.theme__btn');
-  if (themeButton) {
-    applyTheme(themeButton.dataset.themeChoice);
+  if (event.target.closest('.theme-toggle')) {
+    applyTheme(activeTheme() === 'dark' ? 'light' : 'dark');
     return;
   }
-  if (event.target.closest('.install')) {
-    nav.classList.remove('is-open');
-    burger.setAttribute('aria-expanded', 'false');
-    openInstallModal();
-  }
+  if (event.target.closest('.install')) openInstallModal();
 });
 
-// Пока выбрано «Авто», следим за настройкой системы.
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (storedTheme() === 'system') applyTheme('system');
+// Пока человек не выбрал тему сам, идём за настройкой системы.
+systemDark.addEventListener('change', () => {
+  if (!storedTheme()) applyTheme(null);
 });
 
 applyTheme(storedTheme());

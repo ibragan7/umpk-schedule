@@ -182,79 +182,27 @@ button { font: inherit; }
   color: var(--ink-2);
 }
 
-.burger {
+/* Кнопки темы и установки — справа от логотипа, одинаково на телефоне
+   и на компьютере. Отдельного меню под них больше нет. */
+.tools {
   margin-left: auto;
-  width: 44px; height: 44px;
-  display: grid; place-content: center; gap: 5px;
-  background: none; border: 0; cursor: pointer; padding: 0;
-}
-.burger span {
-  display: block; width: 24px; height: 2.5px; border-radius: 2px;
-  background: var(--ink); transition: transform .2s, opacity .2s;
-}
-.burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
-.burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
-.burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
-
-.nav { display: none; }
-.nav.is-open {
-  display: block;
-  position: absolute;
-  left: 0; right: 0; top: 100%;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  padding: 4px 16px 14px;
-  box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 8px;
 }
 
-.nav__tools { padding-top: 10px; display: grid; gap: 10px; justify-items: end; }
-.nav__label {
-  font-size: 13px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-/* переключатель темы */
-.theme {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-.theme__btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 46px; height: 34px; padding: 0 12px;
-  border: 0; border-radius: 999px;
-  background: none; color: var(--ink-2);
-  font-size: 14px; font-weight: 600; cursor: pointer;
-}
-.theme__btn svg {
-  width: 17px; height: 17px;
-  fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round;
-}
-.theme__btn:hover { color: var(--blue); }
-.theme__btn.is-active {
-  background: var(--surface);
-  color: var(--blue);
-  box-shadow: var(--shadow);
-}
-
-/* кнопка установки */
-.install {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
+.icon-btn {
+  flex: none;
+  width: 42px; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink-2);
-  font-size: 15px; font-weight: 600; cursor: pointer;
+  cursor: pointer;
 }
-.install:hover { color: var(--blue); border-color: var(--blue-600); }
-.install svg {
-  width: 18px; height: 18px;
+.icon-btn:hover { color: var(--blue); border-color: var(--blue-600); }
+.icon-btn svg {
+  width: 19px; height: 19px;
   fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
 }
@@ -485,6 +433,16 @@ button { font: inherit; }
   .tab { font-size: 13px; padding: 11px 2px; }
 }
 
+/* Две кнопки занимают больше места, чем прежний бургер: на самых узких
+   экранах полное название колледжа переносилось на четыре строки и раздувало
+   шапку. Там оставляем «УМПК» — оно и так всё объясняет. На 375 px (обычный
+   iPhone) название помещается, поэтому граница ниже. */
+@media (max-width: 359px) {
+  .brand__full { display: none; }
+  .icon-btn { width: 38px; height: 38px; }
+  .tools { gap: 6px; }
+}
+
 /* выбор недели */
 .weekpick {
   display: flex;
@@ -695,14 +653,9 @@ button { font: inherit; }
 
 @media (min-width: 900px) {
   :root { --topbar-h: 76px; }
-  .burger { display: none; }
-  .nav { display: flex; margin-left: auto; }
-  .nav__label { display: none; }   /* на широком экране подпись лишняя */
-  .nav__tools {
-    display: flex; align-items: center; gap: 10px;
-    padding: 0;
-  }
-  .install { padding: 9px 14px; font-size: 15px; }
+  .tools { gap: 10px; }
+  .icon-btn { width: 46px; height: 46px; }
+  .icon-btn svg { width: 21px; height: 21px; }
 
   .modal { align-items: center; padding: 24px; }
   .modal__box { border-radius: var(--radius); max-height: 82vh; padding: 28px 30px 30px; }
