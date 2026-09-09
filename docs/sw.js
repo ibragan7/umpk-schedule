@@ -2,7 +2,7 @@
    Работает только на localhost или по HTTPS — так устроены браузеры. */
 'use strict';
 
-const CACHE = 'umpk-v4';
+const CACHE = 'umpk-v5';
 
 // Сколько ждать сеть, прежде чем показать сохранённую копию. Нужен потому,
 // что «интернета нет» и «сеть не отвечает» — разные вещи: при выключенном
@@ -12,8 +12,8 @@ const NETWORK_TIMEOUT = 5000;
 const SHELL = [
   './',
   'index.html',
-  'styles.css?v=4',
-  'app.js?v=4',
+  'styles.css?v=5',
+  'app.js?v=5',
   'manifest.webmanifest',
   // Само расписание: без него офлайн открылся бы пустой сайт.
   'data/schedule.json',
@@ -92,8 +92,21 @@ async function fromCache(request) {
   });
 }
 
+/**
+ * Расписание меняется раз в час, а GitHub Pages просит держать файлы десять
+ * минут — и обычный fetch эти десять минут сервер даже не спрашивает, отдавая
+ * своё. Для файла расписания требуем проверку: телефон показывал бы вчерашние
+ * пары, считая их свежими. Лишнего трафика нет — не изменился, придёт пустой
+ * ответ 304.
+ */
+function freshen(request) {
+  const isSchedule = new URL(request.url).pathname.endsWith('/data/schedule.json');
+  if (!isSchedule || request.mode === 'navigate') return request;
+  return new Request(request, { cache: 'no-cache' });
+}
+
 function fetchAndStore(request) {
-  return fetch(request).then((response) => {
+  return fetch(freshen(request)).then((response) => {
     if (response && response.ok && response.type === 'basic') {
       const copy = response.clone();
       caches.open(CACHE).then((cache) => cache.put(request, copy));
