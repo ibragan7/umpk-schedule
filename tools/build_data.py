@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -42,6 +42,21 @@ def slot_of(lesson: dict) -> str:
 
 def content_of(lesson: dict) -> tuple:
     return tuple(lesson.get(f) or "" for f in CONTENT_FIELDS)
+
+
+def signature(payload: dict) -> str:
+    """Само расписание, без отметок и служебных полей.
+
+    По нему решаем, менялось ли расписание на самом деле. Сравнивать файлы
+    целиком нельзя: дата сборки и время правки исходников в облаке меняются
+    сами по себе, и «обновлено» съезжало бы на каждом запуске.
+    """
+    lessons = sorted(
+        tuple(str(l.get(f) or "") for f in SLOT_FIELDS + CONTENT_FIELDS)
+        for l in payload["lessons"]
+    )
+    return json.dumps([lessons, payload["groups"], payload["teachers"],
+                       payload["weeks"]], ensure_ascii=False)
 
 
 def collect() -> dict:
@@ -86,6 +101,9 @@ def collect() -> dict:
         # Дата сборки, а не время: файл коммитится в репозиторий, точное
         # время правки видно в истории git.
         "built_on": date.today().isoformat(),
+        # Когда расписание последний раз изменилось. Проставляется в main():
+        # если пары те же, переносится из прошлой сборки.
+        "updated_at": None,
         "anchor_monday": (anchor or DEFAULT_ANCHOR).isoformat(),
         "groups": sorted(set(groups), key=natural_group_key),
         "teachers": sorted(teachers),
@@ -164,6 +182,17 @@ def main() -> int:
         print("ОШИБКА: %s" % error)
         print("Файл сайта не тронут — останется предыдущая версия расписания.")
         return 1
+
+    # Время показываем на главной. Двигаем его только когда расписание
+    # действительно другое: иначе каждый запуск менял бы файл, и Actions
+    # коммитил бы его каждые полчаса впустую.
+    if old.get("updated_at") and signature(payload) == signature(old):
+        payload["updated_at"] = old["updated_at"]
+        print("расписание не изменилось, отметка «обновлено» прежняя: %s"
+              % payload["updated_at"])
+    else:
+        payload["updated_at"] = datetime.now(timezone.utc).replace(
+            microsecond=0).isoformat()
 
     SITE_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))

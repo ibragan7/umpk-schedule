@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v5';
+const SITE_VERSION = 'umpk-v6';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -45,6 +45,40 @@ function dayLabel(date) {
 
 function mondayOf(date) {
   return addDays(date, -((date.getDay() + 6) % 7));
+}
+
+/**
+ * Дата, которой помечено расписание: когда оно последний раз менялось.
+ * У файлов старых сборок поля updated_at нет — тогда берём дату сборки,
+ * иначе подвал и главная показывали бы разные даты про одно и то же.
+ */
+function scheduleDate(meta) {
+  if (!meta) return null;
+  if (meta.updated_at) {
+    const when = new Date(meta.updated_at);
+    if (!Number.isNaN(when.getTime())) return when;
+  }
+  return meta.built_on ? new Date(meta.built_on + 'T00:00:00') : null;
+}
+
+/**
+ * «сегодня в 18:27», «вчера в 09:40» или «9 сентября» — когда расписание
+ * последний раз менялось. Время в поясе устройства: в файле оно записано
+ * с часовым поясом, и Date переводит само.
+ */
+function updatedLabel(iso) {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+
+  const time = when.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const today = isoDate(new Date());
+  if (isoDate(when) === today) return `сегодня в ${time}`;
+  if (isoDate(when) === isoDate(addDays(new Date(), -1))) return `вчера в ${time}`;
+
+  const sameYear = when.getFullYear() === new Date().getFullYear();
+  return when.toLocaleDateString('ru-RU',
+    sameYear ? { day: 'numeric', month: 'long' }
+             : { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 /* ------------------------------------------------------------- данные --- */
@@ -375,6 +409,15 @@ function renderHome() {
     note.textContent = App.meta.ready
       ? `Сейчас идёт ${App.meta.current_week}-я неделя`
       : 'Расписание не загрузилось — обновите страницу.';
+  }
+
+  // Старые файлы расписания поля updated_at не содержат — тогда строки просто нет.
+  const updated = document.getElementById('home-updated');
+  const label = App.meta && App.meta.ready && App.meta.updated_at
+    ? updatedLabel(App.meta.updated_at) : '';
+  if (label) {
+    updated.textContent = `Расписание обновлено ${label}`;
+    updated.hidden = false;
   }
 
   fillRecent(document.getElementById('home-recent'), readRecent());
@@ -970,8 +1013,11 @@ function renderInfo() {
   }
   const list = el('dl');
   const rows = [
-    ['Расписание собрано', meta.built_on
-      ? new Date(meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU') : '—'],
+    ['Расписание обновлено', meta.updated_at
+      ? new Date(meta.updated_at).toLocaleString('ru-RU',
+          { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+      : (meta.built_on
+          ? new Date(meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU') : '—')],
     ['Периодичность', 'каждые полчаса'],
     ['Групп', String(meta.groups.length)],
     ['Преподавателей', String(meta.teachers.length)],
@@ -1030,8 +1076,9 @@ async function route() {
 function updateFooter() {
   const line = document.getElementById('footer-meta');
   if (!App.meta) { line.textContent = 'Не удалось загрузить расписание.'; return; }
-  line.textContent = App.meta.built_on
-    ? `Расписание от ${new Date(App.meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU')}`
+  const when = scheduleDate(App.meta);
+  line.textContent = when
+    ? `Расписание от ${when.toLocaleDateString('ru-RU')}`
     : '';
 }
 
@@ -1051,9 +1098,8 @@ function updateOffline() {
 
 function offlineText() {
   if (!App.data) return 'Нет сети — расписание не загрузилось';
-  const built = App.meta && App.meta.built_on
-    ? ` от ${new Date(App.meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU')}`
-    : '';
+  const when = scheduleDate(App.meta);
+  const built = when ? ` от ${when.toLocaleDateString('ru-RU')}` : '';
   // Сеть есть, а файл всё равно из кэша — значит, обновление не доехало.
   return navigator.onLine
     ? `Не удалось проверить обновления — расписание${built} из памяти устройства`
@@ -1084,6 +1130,7 @@ function buildMeta(data) {
     teachers: data.teachers,
     current_week: weekNumber(new Date()),
     built_on: data.built_on,
+    updated_at: data.updated_at,
     anchor_monday: data.anchor_monday,
     files: data.files,
     warnings: data.warnings,

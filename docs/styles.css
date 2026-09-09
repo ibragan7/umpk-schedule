@@ -236,6 +236,7 @@ button { font: inherit; }
 
 .hero { padding-top: 8px; }
 .hero__note { margin-top: 22px; text-align: center; color: var(--ink-3); font-size: 14px; }
+.hero__updated { margin-top: 6px; text-align: center; color: var(--ink-3); font-size: 13px; opacity: .75; }
 
 .cards { display: grid; gap: 16px; }
 
