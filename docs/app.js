@@ -9,6 +9,10 @@ const App = {
   tick: null,          // перерисовка раз в минуту, чтобы «сейчас» и «прошло» не устаревали
 };
 
+// Поднимается вручную при заметных правках сайта — по нему видно,
+// подхватило ли устройство новую версию. Показывается в «О расписании».
+const SITE_VERSION = 'umpk-v3';
+
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
 const MAX_RECENT = 3;
@@ -22,12 +26,6 @@ function el(tag, className, text) {
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
-}
-
-async function api(path) {
-  const response = await fetch(path, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.json();
 }
 
 function isoDate(date) {
@@ -62,7 +60,12 @@ const WEEKDAY_NAMES = {
  * Сервер не нужен: весь семестр — около 50 КБ в сжатом виде.
  */
 async function loadData() {
-  const data = await api(DATA_URL);
+  const response = await fetch(DATA_URL, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  const data = await response.json();
+  // Заголовок ставит service worker, когда сеть не ответила и файл взят из кэша.
+  data.fromCache = response.headers.get('X-From-Cache') === '1';
+
   data.byGroup = new Map();
   data.byTeacher = new Map();
   data.removedByGroup = new Map();
@@ -880,10 +883,72 @@ function renderLesson(lesson, nowMinutes, kind) {
 
 /* --------------------------------------------------------------- инфо --- */
 
+/**
+ * Что сайт может показать без сети. Собирается на самом устройстве: с телефона
+ * иначе не понять, встал ли service worker и сохранилось ли расписание.
+ */
+async function offlineReport() {
+  const report = {
+    address: location.origin,
+    secure: window.isSecureContext,
+    worker: 'не поддерживается браузером',
+    saved: 'нет',
+    source: App.data ? (App.data.fromCache ? 'из памяти устройства' : 'из сети') : 'не загрузилось',
+  };
+
+  if (!('serviceWorker' in navigator)) return report;
+  if (!window.isSecureContext) {
+    // Браузеры разрешают service worker только на localhost или по https.
+    report.worker = 'не может встать: соединение не защищено';
+    return report;
+  }
+
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) report.worker = 'не установлен';
+  else if (!navigator.serviceWorker.controller) report.worker = 'ставится, нужна перезагрузка';
+  else report.worker = 'работает';
+
+  try {
+    const names = await caches.keys();
+    const hit = await caches.match(DATA_URL);
+    const files = names.length ? (await (await caches.open(names[0])).keys()).length : 0;
+    report.saved = hit ? `да, файлов сохранено: ${files}` : 'нет — расписание без сети не откроется';
+  } catch {
+    report.saved = 'проверить не удалось';
+  }
+  return report;
+}
+
+function renderOfflineBlock(body) {
+  const block = el('div', 'info__block');
+  block.append(el('h2', null, 'Работа без сети'));
+  const list = el('dl');
+  list.append(el('dt', null, 'Проверяем…'), el('dd', null, ''));
+  block.append(list);
+  body.append(block);
+
+  offlineReport().then((report) => {
+    list.replaceChildren();
+    const rows = [
+      ['Адрес', report.address],
+      ['Защищённое соединение', report.secure ? 'да' : 'нет'],
+      ['Сохранённая копия сайта', report.worker],
+      ['Расписание сохранено', report.saved],
+      ['Открытое расписание', report.source],
+      ['Версия сайта', SITE_VERSION],
+    ];
+    for (const [term, value] of rows) {
+      list.append(el('dt', null, term), el('dd', null, value));
+    }
+  });
+}
+
 function renderInfo() {
   App.root.replaceChildren(tpl('tpl-info'));
   const body = document.getElementById('info-body');
   const meta = App.meta;
+  // Блок «без сети» рисуем всегда: когда расписание не загрузилось, он и нужен.
+  renderOfflineBlock(body);
   if (!meta) {
     body.append(el('div', 'empty', 'Расписание не загрузилось. Обновите страницу.'));
     return;
@@ -966,27 +1031,76 @@ function updateFooter() {
     : '';
 }
 
+/* ----------------------------------------------------------- нет сети --- */
+
+/**
+ * Полоска сверху. Поднимается, когда расписание пришло из сохранённой копии
+ * или браузер сообщает, что сети нет: без неё человек не отличит вчерашнее
+ * расписание от сегодняшнего и может прийти на отменённую пару.
+ */
+function updateOffline() {
+  const bar = document.getElementById('offline');
+  const show = !navigator.onLine || Boolean(App.data && App.data.fromCache);
+  bar.hidden = !show;
+  if (show) document.getElementById('offline-text').textContent = offlineText();
+}
+
+function offlineText() {
+  if (!App.data) return 'Нет сети — расписание не загрузилось';
+  const built = App.meta && App.meta.built_on
+    ? ` от ${new Date(App.meta.built_on + 'T00:00:00').toLocaleDateString('ru-RU')}`
+    : '';
+  // Сеть есть, а файл всё равно из кэша — значит, обновление не доехало.
+  return navigator.onLine
+    ? `Не удалось проверить обновления — расписание${built} из памяти устройства`
+    : `Нет сети — показано сохранённое расписание${built}`;
+}
+
+/** Сеть вернулась — перечитываем файл и перерисовываем открытый экран. */
+async function refresh() {
+  let data;
+  try {
+    data = await loadData();
+  } catch (error) {
+    console.error('Не удалось обновить расписание:', error);
+    updateOffline();
+    return;
+  }
+  App.data = data;
+  App.meta = buildMeta(data);
+  updateFooter();
+  updateOffline();
+  await route();
+}
+
+function buildMeta(data) {
+  return {
+    ready: true,
+    groups: data.groups,
+    teachers: data.teachers,
+    current_week: weekNumber(new Date()),
+    built_on: data.built_on,
+    anchor_monday: data.anchor_monday,
+    files: data.files,
+    warnings: data.warnings,
+  };
+}
+
 async function start() {
   App.root.replaceChildren(el('div', 'loading', 'Загружаем расписание…'));
   try {
     App.data = await loadData();
-    App.meta = {
-      ready: true,
-      groups: App.data.groups,
-      teachers: App.data.teachers,
-      current_week: weekNumber(new Date()),
-      built_on: App.data.built_on,
-      anchor_monday: App.data.anchor_monday,
-      files: App.data.files,
-      warnings: App.data.warnings,
-    };
+    App.meta = buildMeta(App.data);
   } catch (error) {
     App.data = null;
     App.meta = null;
     console.error('Не удалось прочитать', DATA_URL, error);
   }
   updateFooter();
+  updateOffline();
   window.addEventListener('hashchange', route);
+  window.addEventListener('offline', updateOffline);
+  window.addEventListener('online', refresh);
   await route();
 }
 

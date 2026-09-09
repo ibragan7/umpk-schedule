@@ -26,6 +26,17 @@
 <body>
 
 <header class="topbar">
+  <!-- Поднимается, когда расписание пришло не из сети, а из сохранённой копии:
+       иначе человек не отличит вчерашнее расписание от сегодняшнего. -->
+  <div class="offline" id="offline" role="status" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.5 8.5a9 9 0 0 1 4-2.2M12 5.5a9 9 0 0 1 8.5 3M6.8 12a6 6 0 0 1 2.3-1.4M15 11a6 6 0 0 1 2.2 1M10 15.2a2.5 2.5 0 0 1 4 0"/>
+      <path d="M12 19h.01"/>
+      <path d="M3 3l18 18"/>
+    </svg>
+    <span id="offline-text"></span>
+  </div>
+
   <div class="topbar__inner">
     <a class="brand" href="#/" aria-label="На главную">
       <span class="brand__mark">
