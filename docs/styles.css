@@ -253,14 +253,14 @@ button { font: inherit; }
 .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: var(--line-hover); }
 .card:active { transform: translateY(-1px); }
 
+/* Иконка на карточке. Заливкой, не обводкой: значки нарисованы сплошными
+   фигурами. currentColor — чтобы цвет менялся вместе с темой. */
 .card__icon {
-  width: 88px; height: 88px;
-  margin-bottom: 14px;
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 3.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  display: block;
+  width: 40px; height: 40px;
+  margin: 0 auto 12px;
+  color: var(--blue);
+  fill: currentColor;
 }
 .card__title { margin: 0 0 8px; font-size: 26px; font-weight: 600; color: var(--blue); }
 .card__text { margin: 0; color: var(--ink-3); }
