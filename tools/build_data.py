@@ -7,56 +7,27 @@
 Сервер для работы сайта не нужен: весь семестр весит около 50 КБ в сжатом
 виде, и браузер забирает его одним запросом.
 
-Заодно сравнивает новое расписание с предыдущей сборкой и помечает,
-что изменилось: появившиеся и переехавшие пары получают отметку, снятые
-попадают в отдельный список. Отметки живут CHANGE_MARK_DAYS дней,
-потом сами пропадают.
+Файл переписывается на каждом запуске, даже если в расписании ничего
+не поменялось: так на главной всегда видно, когда сайт последний раз
+ходил в облако.
 
-Этот же скрипт запускает GitHub Actions раз в час (.github/workflows/update.yml).
-Код возврата 0 — файл собран, 1 — что-то пошло не так и старый файл не тронут.
+Этот же скрипт запускает GitHub Actions каждые полчаса
+(.github/workflows/update.yml). Код возврата 0 — файл собран, 1 — что-то
+пошло не так и старый файл не тронут.
 """
 from __future__ import annotations
 
 import json
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding="utf-8")
 
 from app import cloud                                              # noqa: E402
-from app.config import (CHANGE_MARK_DAYS, DEFAULT_ANCHOR,          # noqa: E402
-                        RAW_DIR, SITE_DATA_FILE)
+from app.config import DEFAULT_ANCHOR, RAW_DIR, SITE_DATA_FILE     # noqa: E402
 from app.parser import natural_group_key, parse_workbook           # noqa: E402
-
-# Чем пара «та же самая»: место в сетке расписания.
-SLOT_FIELDS = ("group", "week", "weekday", "pair", "subgroup")
-# Что в ней может поменяться.
-CONTENT_FIELDS = ("subject", "teacher", "room", "time", "note")
-
-
-def slot_of(lesson: dict) -> str:
-    return "|".join(str(lesson.get(f) or "") for f in SLOT_FIELDS)
-
-
-def content_of(lesson: dict) -> tuple:
-    return tuple(lesson.get(f) or "" for f in CONTENT_FIELDS)
-
-
-def signature(payload: dict) -> str:
-    """Само расписание, без отметок и служебных полей.
-
-    По нему решаем, менялось ли расписание на самом деле. Сравнивать файлы
-    целиком нельзя: дата сборки и время правки исходников в облаке меняются
-    сами по себе, и «обновлено» съезжало бы на каждом запуске.
-    """
-    lessons = sorted(
-        tuple(str(l.get(f) or "") for f in SLOT_FIELDS + CONTENT_FIELDS)
-        for l in payload["lessons"]
-    )
-    return json.dumps([lessons, payload["groups"], payload["teachers"],
-                       payload["weeks"]], ensure_ascii=False)
 
 
 def collect() -> dict:
@@ -101,9 +72,9 @@ def collect() -> dict:
         # Дата сборки, а не время: файл коммитится в репозиторий, точное
         # время правки видно в истории git.
         "built_on": date.today().isoformat(),
-        # Когда расписание последний раз изменилось. Проставляется в main():
-        # если пары те же, переносится из прошлой сборки.
-        "updated_at": None,
+        # Когда сборка последний раз забрала таблицы из облака. Это время
+        # сайт показывает на главной строкой «Расписание обновлено …».
+        "updated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "anchor_monday": (anchor or DEFAULT_ANCHOR).isoformat(),
         "groups": sorted(set(groups), key=natural_group_key),
         "teachers": sorted(teachers),
@@ -114,85 +85,14 @@ def collect() -> dict:
     }
 
 
-def previous() -> dict:
-    """Прошлая сборка — с ней сравниваем. Нет файла или он битый — считаем, что её не было."""
-    if not SITE_DATA_FILE.exists():
-        return {}
-    try:
-        return json.loads(SITE_DATA_FILE.read_text(encoding="utf-8"))
-    except Exception as error:
-        print("  предыдущий файл не прочитался (%s), отметки начнём заново" % error)
-        return {}
-
-
-def mark_changes(payload: dict, old: dict) -> dict:
-    """Проставляет отметки «новая» и «изменилась», собирает снятые пары.
-
-    Первая сборка ничего не помечает: сравнивать не с чем, иначе всё
-    расписание разом стало бы «новым».
-    """
-    today = date.today()
-    fresh = (today - timedelta(days=CHANGE_MARK_DAYS)).isoformat()
-
-    payload["removed"] = []
-    if not old.get("lessons"):
-        return payload
-
-    was = {slot_of(l): l for l in old["lessons"]}
-    added = changed = 0
-
-    for lesson in payload["lessons"]:
-        before = was.pop(slot_of(lesson), None)
-        if before is None:
-            lesson["mark"] = "new"
-            lesson["mark_on"] = today.isoformat()
-            added += 1
-        elif content_of(before) != content_of(lesson):
-            lesson["mark"] = "changed"
-            lesson["mark_on"] = today.isoformat()
-            changed += 1
-        elif before.get("mark") and before.get("mark_on", "") >= fresh:
-            lesson["mark"] = before["mark"]
-            lesson["mark_on"] = before["mark_on"]
-
-    # Всё, что осталось в was, из расписания пропало.
-    for lesson in was.values():
-        entry = dict(lesson)
-        entry["mark"] = "removed"
-        entry["mark_on"] = today.isoformat()
-        payload["removed"].append(entry)
-
-    for entry in old.get("removed", []):
-        if entry.get("mark_on", "") >= fresh and slot_of(entry) not in {
-            slot_of(l) for l in payload["lessons"]
-        }:
-            payload["removed"].append(entry)
-
-    print("\nизменения против прошлой сборки: новых %d, изменённых %d, снятых %d"
-          % (added, changed, len(payload["removed"])))
-    return payload
-
-
 def main() -> int:
     print("Скачиваем таблицы из облака…")
     try:
-        old = previous()
-        payload = mark_changes(collect(), old)
+        payload = collect()
     except Exception as error:
         print("ОШИБКА: %s" % error)
         print("Файл сайта не тронут — останется предыдущая версия расписания.")
         return 1
-
-    # Время показываем на главной. Двигаем его только когда расписание
-    # действительно другое: иначе каждый запуск менял бы файл, и Actions
-    # коммитил бы его каждые полчаса впустую.
-    if old.get("updated_at") and signature(payload) == signature(old):
-        payload["updated_at"] = old["updated_at"]
-        print("расписание не изменилось, отметка «обновлено» прежняя: %s"
-              % payload["updated_at"])
-    else:
-        payload["updated_at"] = datetime.now(timezone.utc).replace(
-            microsecond=0).isoformat()
 
     SITE_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))

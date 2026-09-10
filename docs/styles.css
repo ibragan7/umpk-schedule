@@ -387,22 +387,6 @@ button { font: inherit; }
 .badge--sub { background: var(--sub-bg); color: var(--sub-ink); }
 .badge--note { background: var(--note-bg); color: var(--note-ink); }
 
-/* отметки о правках расписания */
-.badge--new { background: var(--green-100); color: var(--green-ink); }
-.badge--changed { background: var(--sub-bg); color: var(--sub-ink); }
-.badge--removed { background: var(--note-bg); color: var(--note-ink); }
-
-/* пара, которую сняли: её больше нет в сетке, показываем зачёркнутой */
-.lesson--removed { background: var(--done-bg); }
-.lesson--removed .lesson__subject,
-.lesson--removed .lesson__start,
-.lesson--removed .lesson__end {
-  color: var(--ink-3);
-  text-decoration: line-through;
-}
-.lesson--removed .lesson__meta { color: var(--ink-3); }
-.lesson--removed .lesson__meta .badge { text-decoration: none; }
-
 /* вкладки «дата · дата · неделя» */
 .tabs {
   display: flex;

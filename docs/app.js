@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v6';
+const SITE_VERSION = 'umpk-v7';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -48,7 +48,8 @@ function mondayOf(date) {
 }
 
 /**
- * Дата, которой помечено расписание: когда оно последний раз менялось.
+ * Дата, которой помечено расписание: когда сборка последний раз забрала
+ * таблицы из облака.
  * У файлов старых сборок поля updated_at нет — тогда берём дату сборки,
  * иначе подвал и главная показывали бы разные даты про одно и то же.
  */
@@ -63,7 +64,7 @@ function scheduleDate(meta) {
 
 /**
  * «сегодня в 18:27», «вчера в 09:40» или «9 сентября» — когда расписание
- * последний раз менялось. Время в поясе устройства: в файле оно записано
+ * последний раз обновляли. Время в поясе устройства: в файле оно записано
  * с часовым поясом, и Date переводит само.
  */
 function updatedLabel(iso) {
@@ -102,8 +103,6 @@ async function loadData() {
 
   data.byGroup = new Map();
   data.byTeacher = new Map();
-  data.removedByGroup = new Map();
-  data.removedByTeacher = new Map();
 
   const put = (map, key, lesson) => {
     if (!map.has(key)) map.set(key, []);
@@ -113,12 +112,6 @@ async function loadData() {
   for (const lesson of data.lessons) {
     put(data.byGroup, lesson.group, lesson);
     if (lesson.teacher) put(data.byTeacher, lesson.teacher, lesson);
-  }
-  // Пары, снятые с расписания: их больше нет, но несколько дней показываем
-  // зачёркнутыми — иначе человек не заметит, что занятие отменили.
-  for (const lesson of data.removed || []) {
-    put(data.removedByGroup, lesson.group, lesson);
-    if (lesson.teacher) put(data.removedByTeacher, lesson.teacher, lesson);
   }
   return data;
 }
@@ -162,7 +155,6 @@ function publishedWeeks() {
 function scheduleFor(kind, name, start, days) {
   const forGroup = kind === 'group';
   const source = (forGroup ? App.data.byGroup : App.data.byTeacher).get(name) || [];
-  const gone = (forGroup ? App.data.removedByGroup : App.data.removedByTeacher).get(name) || [];
 
   const onDay = (list, weekday, week) => list
     .filter((l) => l.weekday === weekday && (l.week === 0 || l.week === week))
@@ -180,7 +172,6 @@ function scheduleFor(kind, name, start, days) {
       date_label: dayLabel(day),
       week,
       lessons: weekday === 7 ? [] : onDay(source, weekday, week),
-      removed: weekday === 7 ? [] : onDay(gone, weekday, week),
     });
   }
   return { kind, name, found: source.length > 0, days: result };
@@ -665,8 +656,7 @@ function renderDay(day, isToday, kind) {
   if (isToday) head.append(el('span', 'day__today', 'сегодня'));
   card.append(head);
 
-  const removed = day.removed || [];
-  if (!day.lessons.length && !removed.length) {
+  if (!day.lessons.length) {
     card.append(el('div', 'day__empty',
       day.weekday === 7 ? 'Воскресенье — выходной' : 'Занятий нет'));
     return card;
@@ -675,11 +665,6 @@ function renderDay(day, isToday, kind) {
   const nowMinutes = isToday ? currentMinutes() : -1;
   for (const lesson of day.lessons) {
     card.append(renderLesson(lesson, nowMinutes, kind));
-  }
-  // Снятые пары показываем последними и зачёркнутыми: их уже нет в сетке,
-  // но человеку важно увидеть, что занятие отменили.
-  for (const lesson of removed) {
-    card.append(renderLesson(lesson, -1, kind));
   }
   return card;
 }
@@ -735,14 +720,11 @@ function drawDay(day, title, kind) {
     return lines;
   };
 
-  const lessons = [...day.lessons, ...(day.removed || [])];
+  const lessons = day.lessons;
   const textLeft = PAD + 96;
   const textWidth = W - textLeft - PAD;
 
   // Первый проход — считаем высоту, чтобы не резать содержимое.
-  const MARK_TEXT = { new: 'новая', changed: 'изменилась', removed: 'снята' };
-  const MARK_COLOR = { new: '#1f6e2b', changed: '#a35b00', removed: '#b3261e' };
-
   const rows = lessons.map((l) => {
     const subject = wrap(l.subject, textWidth, 21, 700);
     const meta = [
@@ -750,11 +732,9 @@ function drawDay(day, title, kind) {
       l.room && 'ауд. ' + l.room,
       l.subgroup && `${l.subgroup}-я подгруппа`,
     ].filter(Boolean).join('   ');
-    const mark = MARK_TEXT[l.mark] || '';
     return {
-      lesson: l, subject, meta, mark,
-      markColor: MARK_COLOR[l.mark],
-      height: subject.length * 27 + (meta || mark ? 26 : 4) + 22,
+      lesson: l, subject, meta,
+      height: subject.length * 27 + (meta ? 26 : 4) + 22,
     };
   });
 
@@ -799,40 +779,26 @@ function drawDay(day, title, kind) {
 
   for (const row of rows) {
     const [start, end] = row.lesson.time.split(/[-–—]/).map((p) => p.trim());
-    const faded = row.lesson.mark === 'removed';
 
-    ctx.fillStyle = faded ? '#7b88a1' : '#17233c';
+    ctx.fillStyle = '#17233c';
     ctx.font = font(21, 700);
     ctx.fillText(start, PAD, y + 21);
     ctx.fillStyle = '#7b88a1';
     ctx.font = font(17);
     if (end) ctx.fillText(end, PAD, y + 44);
 
-    ctx.fillStyle = faded ? '#7b88a1' : '#17233c';
+    ctx.fillStyle = '#17233c';
     ctx.font = font(21, 700);
     let ty = y + 21;
     for (const line of row.subject) {
       ctx.fillText(line, textLeft, ty);
-      if (faded) {                    // зачёркиваем снятую пару
-        const w = ctx.measureText(line).width;
-        ctx.fillRect(textLeft, ty - 7, w, 1.5);
-      }
       ty += 27;
     }
 
-    if (row.meta || row.mark) {
+    if (row.meta) {
+      ctx.fillStyle = '#41506d';
       ctx.font = font(17);
-      let mx = textLeft;
-      if (row.meta) {
-        ctx.fillStyle = '#41506d';
-        ctx.fillText(row.meta, mx, ty + 2);
-        mx += ctx.measureText(row.meta).width + 16;
-      }
-      if (row.mark) {                 // отметку красим, иначе теряется в сером
-        ctx.fillStyle = row.markColor;
-        ctx.font = font(17, 700);
-        ctx.fillText(row.mark, mx, ty + 2);
-      }
+      ctx.fillText(row.meta, textLeft, ty + 2);
     }
 
     y += row.height;
@@ -880,21 +846,14 @@ async function shareDay(day, title, kind) {
   return 'downloaded';
 }
 
-const MARKS = {
-  new: { text: 'новая', cls: 'badge--new' },
-  changed: { text: 'изменилась', cls: 'badge--changed' },
-  removed: { text: 'снята', cls: 'badge--removed' },
-};
-
 function renderLesson(lesson, nowMinutes, kind) {
   // nowMinutes < 0 — день не сегодняшний, отмечать нечего.
   const range = lessonRange(lesson.time);
-  const gone = lesson.mark === 'removed';
-  const isNow = !gone && range && nowMinutes >= range[0] && nowMinutes <= range[1];
-  const isDone = !gone && range && nowMinutes >= 0 && nowMinutes > range[1];
+  const isNow = range && nowMinutes >= range[0] && nowMinutes <= range[1];
+  const isDone = range && nowMinutes >= 0 && nowMinutes > range[1];
 
-  const row = el('div', `lesson${isNow ? ' lesson--now' : ''}`
-    + `${isDone ? ' lesson--done' : ''}${gone ? ' lesson--removed' : ''}`);
+  const row = el('div',
+    `lesson${isNow ? ' lesson--now' : ''}${isDone ? ' lesson--done' : ''}`);
 
   const [start, end] = lesson.time.split(/[-–—]/).map((part) => part.trim());
   const slot = el('div', 'lesson__slot');
@@ -913,15 +872,6 @@ function renderLesson(lesson, nowMinutes, kind) {
   if (lesson.subgroup) meta.append(el('span', 'badge badge--sub', `${lesson.subgroup}-я подгруппа`));
   if (lesson.note) meta.append(el('span', 'badge badge--note', lesson.note));
 
-  const mark = MARKS[lesson.mark];
-  if (mark) {
-    const badge = el('span', `badge ${mark.cls}`, mark.text);
-    if (lesson.mark_on) {
-      const when = new Date(lesson.mark_on + 'T00:00:00');
-      badge.title = `${mark.text} ${dayLabel(when)}`;
-    }
-    meta.append(badge);
-  }
   if (meta.childNodes.length) body.append(meta);
 
   row.append(body);

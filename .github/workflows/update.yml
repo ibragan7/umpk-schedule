@@ -35,14 +35,18 @@ jobs:
       - name: Собрать расписание
         run: python tools/build_data.py
 
-      - name: Закоммитить, если расписание изменилось
+      - name: Закоммитить расписание
         run: |
-          if git diff --quiet -- docs/data/schedule.json; then
-            echo "Расписание не изменилось — коммит не нужен."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/data/schedule.json
+          # Файл отличается от прошлого при каждом запуске: в нём записано
+          # время, когда сборка ходила в облако. Проверка оставлена только
+          # как страховка — без неё git commit уронил бы запуск, если
+          # менять и правда нечего.
+          if git diff --cached --quiet -- docs/data/schedule.json; then
+            echo "Файл не изменился — коммитить нечего."
+            exit 0
+          fi
           git commit -m "Обновление расписания $(date -u '+%d.%m.%Y %H:%M UTC')"
           git push

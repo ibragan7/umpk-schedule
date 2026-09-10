@@ -21,9 +21,6 @@ HTTP_TIMEOUT = int(os.getenv("UMPK_HTTP_TIMEOUT", "60"))
 # не нашлось ни одной даты.
 DEFAULT_ANCHOR = date(2026, 8, 31)
 
-# Сколько дней показывать отметку «изменилось» рядом с парой.
-CHANGE_MARK_DAYS = int(os.getenv("UMPK_CHANGE_MARK_DAYS", "7"))
-
 # Название учебного заведения (выводится в шапке сайта).
 COLLEGE_SHORT = "УМПК"
 COLLEGE_FULL = "Уфимский многопрофильный профессиональный колледж"
