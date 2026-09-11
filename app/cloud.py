@@ -78,18 +78,34 @@ def download(file: CloudFile, base_url: str | None = None) -> bytes:
 
 
 def download_schedule_files(weblink: str = CLOUD_PUBLIC_LINK) -> list[tuple[CloudFile, bytes]]:
-    """Скачивает все таблицы расписания из публичной папки."""
+    """Скачивает все таблицы расписания из публичной папки.
+
+    Нужны все файлы до единого. Недостача — это не «расписание без одного
+    файла», а расписание без доброй пятой части групп: студенты этих групп
+    увидели бы «расписание не найдено», а в Actions был бы зелёный запуск.
+    Поэтому при любой недокачке поднимаем ошибку и оставляем предыдущий
+    файл сайта нетронутым.
+
+    Перебираем все файлы, прежде чем упасть: в отчёте лучше видеть сразу
+    весь список неудач, а не первую из них.
+    """
     files = [f for f in list_files(weblink) if f.is_xlsx]
     if not files:
         raise RuntimeError("В публичной папке облака не найдено ни одного .xlsx")
     base = download_base_url()
     result: list[tuple[CloudFile, bytes]] = []
+    failed: list[str] = []
     for file in sorted(files, key=lambda f: f.name):
         try:
             result.append((file, download(file, base)))
             log.info("Скачан %s (%d байт)", file.name, file.size)
-        except Exception:
+        except Exception as error:
             log.exception("Не удалось скачать %s", file.name)
-    if not result:
-        raise RuntimeError("Ни один файл расписания не удалось скачать")
+            failed.append(f"{file.name} ({error})")
+    if failed:
+        raise RuntimeError(
+            "не скачались файлы расписания: %s. Скачано %d из %d — "
+            "неполное расписание не публикуем"
+            % ("; ".join(failed), len(result), len(files))
+        )
     return result
