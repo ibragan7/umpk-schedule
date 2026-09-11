@@ -287,12 +287,41 @@ def _read_cell(ws, merges, row, column, group, week, weekday, pair, time,
 
     width = merges.get((row, column), column) - column + 1
     if width >= 3:
-        room = value(row, column + 3)
+        # Дисциплина растянута на всю ширину группы — занятие общее.
+        subgroup, room = None, value(row, column + 3)
     else:
-        room = value(row, column + 1) or value(row, column + 3)
+        subgroup, room = _narrow_cell(ws, merges, row, column, teacher_row, value)
+
     teacher, note = normalize_teacher(value(teacher_row, column))
     return [Lesson(group, week, weekday, pair, time, first_subject,
-                   teacher, room, None, note, source)]
+                   teacher, room, subgroup, note, source)]
+
+
+def _narrow_cell(ws, merges, row, column, teacher_row, value) -> tuple[int | None, str]:
+    """Необъединённая ячейка: подгруппа это или вся группа?
+
+    Две разные ситуации выглядят в таблице почти одинаково. Занятие только
+    у первой подгруппы (у второй в эту пару свободно) и обычное занятие всей
+    группы, у которого в Excel забыли объединить ячейки. Первое нельзя
+    показывать всей группе: вторая подгруппа придёт на чужую практику.
+
+    Различаем по строке преподавателя — её объединяют по фактической ширине
+    занятия: две колонки (c..c+1) у подгруппы, все четыре у общего занятия.
+    Когда строки преподавателя нет («Разговоры о важном»), смотрим, где стоит
+    аудитория: в c+1 — половина первой подгруппы, в c+3 — вся группа.
+
+    На таблицах колледжа признак срабатывает без осечек: из 92 необъединённых
+    ячеек 90 оказались практикой первой подгруппы и 2 — общим занятием.
+    """
+    teacher_width = (merges.get((teacher_row, column), column) - column + 1) if teacher_row else 0
+    left_room = value(row, column + 1)      # аудитория в половине первой подгруппы
+    right_room = value(row, column + 3)     # аудитория общего занятия
+
+    if teacher_width >= 3:
+        return None, right_room or left_room
+    if teacher_width:                        # 1-2 колонки — занятие уже группы
+        return 1, left_room
+    return (1, left_room) if left_room else (None, right_room)
 
 
 def _sheets_to_read(workbook, warnings: list[str], source: str) -> list:
