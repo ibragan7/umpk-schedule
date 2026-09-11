@@ -35,6 +35,9 @@ def main() -> int:
     lessons = []
     problems: list[str] = []
     mondays: dict = {}
+    # Имена групп из шапок таблиц. Держим отдельно от занятий: только так
+    # видно группу, у которой столбец есть, а пар не разобралось ни одной.
+    declared: set[str] = set()
 
     for name, data in collect():
         try:
@@ -45,8 +48,11 @@ def main() -> int:
             continue
 
         lessons.extend(result.lessons)
+        declared.update(result.groups)
         mondays.update(result.mondays)
-        problems.extend(f"{name}: {w}" for w in result.warnings)
+        # Часть предупреждений уже начинается с имени файла — не повторяем его.
+        problems.extend(w if w.startswith(name) else f"{name}: {w}"
+                        for w in result.warnings)
         print(f"{name:<38} групп {len(result.groups):>3} · "
               f"занятий {len(result.lessons):>5} · отсчёт чётности {result.anchor}")
         if not result.lessons:
@@ -80,12 +86,13 @@ def main() -> int:
         print("  дат в шапках дней нет — сайт покажет только текущую неделю")
         problems.append("ни в одном файле не проставлены даты дней")
 
-    empty = [g for g in groups if not any(l.group == g for l in lessons)]
+    empty = sorted(declared - set(groups))
     if empty:
-        problems.append(f"группы без единого занятия: {', '.join(empty)}")
+        problems.append(
+            f"столбец в таблице есть, а занятий не нашлось: {', '.join(empty)}")
 
-    thin = [g for g in groups
-            if sum(1 for l in lessons if l.group == g) < 10]
+    per_group = collections.Counter(l.group for l in lessons)
+    thin = [g for g in groups if per_group[g] < 10]
     if thin:
         problems.append(f"подозрительно мало занятий у групп: {', '.join(thin)}")
 
