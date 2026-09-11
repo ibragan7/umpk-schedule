@@ -2,7 +2,7 @@
    Работает только на localhost или по HTTPS — так устроены браузеры. */
 'use strict';
 
-const CACHE = 'umpk-v8';
+const CACHE = 'umpk-v9';
 
 // Сколько ждать сеть, прежде чем показать сохранённую копию. Нужен потому,
 // что «интернета нет» и «сеть не отвечает» — разные вещи: при выключенном
@@ -12,8 +12,8 @@ const NETWORK_TIMEOUT = 5000;
 const SHELL = [
   './',
   'index.html',
-  'styles.css?v=8',
-  'app.js?v=8',
+  'styles.css?v=9',
+  'app.js?v=9',
   'manifest.webmanifest',
   // Само расписание: без него офлайн открылся бы пустой сайт.
   'data/schedule.json',
@@ -60,28 +60,43 @@ self.addEventListener('fetch', (event) => {
 });
 
 /**
- * Ответ из сети, а если её нет или она молчит дольше NETWORK_TIMEOUT —
- * из сохранённой копии. Запрос при этом не отменяем: дойдёт с опозданием —
- * обновит копию к следующему разу.
+ * Ответ из сети, а если её нет, она молчит дольше NETWORK_TIMEOUT или
+ * отвечает ошибкой — из сохранённой копии. Запрос при этом не отменяем:
+ * дойдёт с опозданием — обновит копию к следующему разу.
+ *
+ * Ошибка сервера — тоже повод достать копию. GitHub Pages в момент выкладки
+ * умеет отдать 404 или 5xx на живой файл; без этой проверки такой ответ
+ * уходил наверх, сайт получал «404» вместо расписания и показывал ошибку —
+ * при том что рядом в кэше лежала рабочая копия.
  */
 function networkFirst(request) {
   const network = fetchAndStore(request).catch(() => null);
   const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT, null));
-  return Promise.race([network, timeout])
-    .then((response) => response || fromCache(request));
+  return Promise.race([network, timeout]).then(async (response) => {
+    if (response && response.ok) return response;
+    const saved = await fromCache(request);
+    if (saved) return saved;
+    // Копии нет: отдаём, что ответила сеть, а если не ответила ничего —
+    // честную ошибку. Подсунуть страницу вместо data/schedule.json нельзя:
+    // разбор упадёт.
+    //
+    // statusText только латиницей: в заголовке ответа допустим лишь
+    // ISO-8859-1, и на кириллице конструктор Response бросает TypeError —
+    // ровно там, где мы и так в худшем положении (нет ни сети, ни копии).
+    return response || new Response('', { status: 504, statusText: 'Offline' });
+  });
 }
 
 /**
- * Сеть не ответила — отдаём сохранённую копию и помечаем её заголовком:
- * по нему сайт понимает, что расписание могло устареть, и поднимает полоску
- * «нет сети». Вместо страницы, которой нет в кэше, отдаём index.html —
- * тогда откроется любая ссылка. Для остального лучше честная ошибка:
- * если подсунуть страницу вместо data/schedule.json, разбор упадёт.
+ * Сохранённая копия с пометкой в заголовке: по ней сайт понимает, что
+ * расписание могло устареть, и поднимает полоску «нет сети». Вместо
+ * страницы, которой нет в кэше, отдаём index.html — тогда откроется любая
+ * ссылка. Копии нет — возвращаем null, решение за вызывающим.
  */
 async function fromCache(request) {
   const hit = await caches.match(request)
     || (request.mode === 'navigate' ? await caches.match('index.html') : null);
-  if (!hit) return new Response('', { status: 504, statusText: 'Нет сети' });
+  if (!hit) return null;
 
   const headers = new Headers(hit.headers);
   headers.set('X-From-Cache', '1');

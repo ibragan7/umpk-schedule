@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v8';
+const SITE_VERSION = 'umpk-v9';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -957,7 +957,11 @@ function renderInfo() {
     'Каждые полчаса GitHub Actions скачивает таблицы расписания из публичной папки облака ' +
     'колледжа, разбирает их и обновляет файл, который читает сайт. Сервер для этого не нужен.'));
   if (meta.weeks && meta.weeks.length) {
-    const weeks = meta.weeks.map((w) => `${w.label} (${w.week}-я)`).join(', ');
+    // В файле у недели есть только понедельник и номер — подпись собираем здесь.
+    const weeks = meta.weeks.map((w) => {
+      const start = new Date(w.monday + 'T00:00:00');
+      return `${shortDate(start)} — ${shortDate(addDays(start, 5))} (${w.week}-я)`;
+    }).join(', ');
     about.append(el('p', null,
       `Листать можно по неделям, у которых в таблицах проставлены даты: ${weeks}.`));
   }
@@ -1082,6 +1086,7 @@ function buildMeta(data) {
     built_on: data.built_on,
     updated_at: data.updated_at,
     anchor_monday: data.anchor_monday,
+    weeks: data.weeks,
     files: data.files,
     warnings: data.warnings,
   };
