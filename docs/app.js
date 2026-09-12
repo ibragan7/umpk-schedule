@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v10';
+const SITE_VERSION = 'umpk-v11';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -103,6 +103,7 @@ async function loadData() {
 
   data.byGroup = new Map();
   data.byTeacher = new Map();
+  data.byRoom = new Map();
 
   const put = (map, key, lesson) => {
     if (!map.has(key)) map.set(key, []);
@@ -112,6 +113,7 @@ async function loadData() {
   for (const lesson of data.lessons) {
     put(data.byGroup, lesson.group, lesson);
     if (lesson.teacher) put(data.byTeacher, lesson.teacher, lesson);
+    if (lesson.room) put(data.byRoom, roomKey(lesson.building, lesson.room), lesson);
   }
   return data;
 }
@@ -153,8 +155,10 @@ function publishedWeeks() {
 }
 
 function scheduleFor(kind, name, start, days) {
-  const forGroup = kind === 'group';
-  const source = (forGroup ? App.data.byGroup : App.data.byTeacher).get(name) || [];
+  const index = kind === 'group' ? App.data.byGroup
+    : kind === 'room' ? App.data.byRoom
+    : App.data.byTeacher;
+  const source = index.get(name) || [];
 
   const onDay = (list, weekday, week) => list
     .filter((l) => l.weekday === weekday && (l.week === 0 || l.week === week))
@@ -202,6 +206,45 @@ function splitGroup(name) {
   return { course, speciality: rest || name.trim() };
 }
 
+/**
+ * Кабинет опознаётся парой «корпус + номер»: «204» есть и в первом здании,
+ * и во втором, и это разные комнаты. Ключ храним одной строкой, чтобы он
+ * ложился в те же Map и «Недавние», что группы и преподаватели.
+ */
+const roomKey = (building, room) => `${building}|${room}`;
+
+function parseRoomKey(key) {
+  const cut = String(key).indexOf('|');
+  return { building: Number(key.slice(0, cut)), room: key.slice(cut + 1) };
+}
+
+function roomLabel(key) {
+  const { building, room } = parseRoomKey(key);
+  return `${room} · ${building} корпус`;
+}
+
+/** Подпись на экране: у групп и преподавателей это само название. */
+const displayName = (kind, name) => (kind === 'room' ? roomLabel(name) : name);
+
+/** Кабинеты по корпусам: сперва номера по возрастанию, потом залы. */
+function compareRooms(a, b) {
+  const x = parseRoomKey(a);
+  const y = parseRoomKey(b);
+  if (x.building !== y.building) return x.building - y.building;
+  // Номером считаем только то, что целиком номер: «204», «230/1», «12а».
+  // «3 этаж 7» под это не подходит и уходит к залам, а не встаёт между 2 и 4.
+  const isNumber = (room) => /^[0-9]+([/][0-9]+)?[а-яё]?$/i.test(room);
+  const numX = isNumber(x.room);
+  const numY = isNumber(y.room);
+  if (numX !== numY) return numX ? -1 : 1;
+  const nx = parseInt(x.room, 10);
+  const ny = parseInt(y.room, 10);
+  if (numX && nx !== ny) return nx - ny;
+  return x.room.localeCompare(y.room, 'ru', { numeric: true });
+}
+
+const roomList = () => (App.data ? [...App.data.byRoom.keys()].sort(compareRooms) : []);
+
 function readRecent() {
   try {
     const stored = JSON.parse(localStorage.getItem(RECENT_KEY));
@@ -215,8 +258,13 @@ function pushRecent(kind, name) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT))); } catch { /* приватный режим */ }
 }
 
-const routeFor = (kind, name) =>
-  `#/${kind === 'group' ? 'g' : 't'}/${encodeURIComponent(name)}`;
+const routeFor = (kind, name) => {
+  if (kind === 'room') {
+    const { building, room } = parseRoomKey(name);
+    return `#/r/${building}/${encodeURIComponent(room)}`;
+  }
+  return `#/${kind === 'group' ? 'g' : 't'}/${encodeURIComponent(name)}`;
+};
 
 /* ------------------------------------------------------------- шапка ---- */
 
@@ -417,7 +465,7 @@ function renderHome() {
 function fillRecent(box, items) {
   if (!box || !items.length) return;
   box.querySelector('.recent__items').replaceChildren(...items.map((item) => {
-    const link = el('a', null, item.name);
+    const link = el('a', null, displayName(item.kind, item.name));
     link.href = routeFor(item.kind, item.name);
     return link;
   }));
@@ -426,30 +474,59 @@ function fillRecent(box, items) {
 
 /* ------------------------------------------------------- выбор группы --- */
 
+// Три экрана выбора устроены одинаково и отличаются только подписями,
+// источником списка и тем, как он разбит на разделы.
+const PICKERS = {
+  group: {
+    title: 'Выберите группу',
+    lead: 'Начните вводить название группы или найдите её в списке ниже.',
+    placeholder: 'Например: 2 ИСиП',
+    items: () => (App.meta ? App.meta.groups : []),
+    render: groupedBySpeciality,
+  },
+  teacher: {
+    title: 'Выберите преподавателя',
+    lead: 'Начните вводить фамилию или выберите из списка.',
+    placeholder: 'Например: Иванов',
+    items: () => (App.meta ? App.meta.teachers : []),
+    render: groupedByLetter,
+  },
+  room: {
+    title: 'Выберите аудиторию',
+    lead: 'Начните вводить номер кабинета или найдите его в списке ниже. '
+        + 'Номера в двух корпусах совпадают, поэтому они разделены по зданиям.',
+    placeholder: 'Например: 204',
+    items: roomList,
+    render: groupedByBuilding,
+  },
+};
+
 function renderPicker(kind) {
   App.root.replaceChildren(tpl('tpl-picker'));
-  const isGroup = kind === 'group';
+  const picker = PICKERS[kind];
   const title = App.root.querySelector('.picker__title');
   const lead = App.root.querySelector('.picker__lead');
   const input = document.getElementById('search');
   const results = document.getElementById('results');
 
-  title.textContent = isGroup ? 'Выберите группу' : 'Выберите преподавателя';
-  lead.textContent = isGroup
-    ? 'Начните вводить название группы или найдите её в списке ниже.'
-    : 'Начните вводить фамилию или выберите из списка.';
-  input.placeholder = isGroup ? 'Например: 2 ИСиП' : 'Например: Иванов';
+  title.textContent = picker.title;
+  lead.textContent = picker.lead;
+  input.placeholder = picker.placeholder;
 
   renderRecent(kind);
 
-  const items = App.meta ? (isGroup ? App.meta.groups : App.meta.teachers) : [];
+  const items = picker.items();
 
   const draw = () => {
     const query = normalize(input.value);
-    const matched = query ? items.filter((name) => normalize(name).includes(query)) : items;
+    // Ищем по тому, что человек видит: у кабинета это «204 · 1 корпус»,
+    // а не внутренний ключ.
+    const matched = query
+      ? items.filter((name) => normalize(displayName(kind, name)).includes(query))
+      : items;
     results.replaceChildren(
       matched.length
-        ? (isGroup ? groupedBySpeciality(matched) : groupedByLetter(matched))
+        ? picker.render(matched)
         : el('div', 'empty', 'Ничего не найдено. Проверьте написание.')
     );
   };
@@ -493,6 +570,30 @@ function groupedBySpeciality(names) {
   return fragment;
 }
 
+function groupedByBuilding(keys) {
+  const buckets = new Map();
+  for (const key of keys) {
+    const { building } = parseRoomKey(key);
+    if (!buckets.has(building)) buckets.set(building, []);
+    buckets.get(building).push(key);
+  }
+  const fragment = document.createDocumentFragment();
+  for (const [building, rooms] of [...buckets].sort((a, b) => a[0] - b[0])) {
+    const wrap = el('div', 'result-group');
+    wrap.append(el('h2', 'result-group__title', `${building} корпус`));
+    const items = el('div', 'result-group__items');
+    for (const key of rooms) {
+      // Внутри раздела корпус уже назван — на плитке только номер.
+      const link = el('a', 'pill', parseRoomKey(key).room);
+      link.href = routeFor('room', key);
+      items.append(link);
+    }
+    wrap.append(items);
+    fragment.append(wrap);
+  }
+  return fragment;
+}
+
 function groupedByLetter(names) {
   const buckets = new Map();
   for (const name of names) {
@@ -518,12 +619,19 @@ function groupedByLetter(names) {
 
 /* --------------------------------------------------------- расписание --- */
 
+const BACK_LINKS = {
+  group: { href: '#/student', text: '← К списку групп' },
+  teacher: { href: '#/teacher', text: '← К списку преподавателей' },
+  room: { href: '#/rooms', text: '← К списку аудиторий' },
+};
+
 async function renderSchedule(kind, name) {
   App.root.replaceChildren(tpl('tpl-schedule'));
-  App.root.querySelector('.schedule__name').textContent = name;
+  const label = displayName(kind, name);
+  App.root.querySelector('.schedule__name').textContent = label;
   const backLink = document.getElementById('back-link');
-  backLink.href = kind === 'group' ? '#/student' : '#/teacher';
-  backLink.textContent = kind === 'group' ? '← К списку групп' : '← К списку преподавателей';
+  backLink.href = BACK_LINKS[kind].href;
+  backLink.textContent = BACK_LINKS[kind].text;
 
   pushRecent(kind, name);
 
@@ -540,7 +648,7 @@ async function renderSchedule(kind, name) {
     shareButton.disabled = true;
     shareText.textContent = 'Готовим…';
     try {
-      const how = await shareDay(shareDayData, name, kind);
+      const how = await shareDay(shareDayData, label, kind);
       shareText.textContent = how === 'downloaded' ? 'Сохранено' : 'Поделиться';
     } catch (error) {
       shareText.textContent = 'Не вышло';
@@ -728,8 +836,9 @@ function drawDay(day, title, kind) {
   const rows = lessons.map((l) => {
     const subject = wrap(l.subject, textWidth, 21, 700);
     const meta = [
-      kind === 'teacher' ? l.group : l.teacher,
-      l.room && 'ауд. ' + l.room,
+      kind !== 'group' && l.group,
+      kind !== 'teacher' && l.teacher,
+      l.room && kind !== 'room' && 'ауд. ' + l.room,
       l.subgroup && `${l.subgroup}-я подгруппа`,
     ].filter(Boolean).join('   ');
     return {
@@ -873,13 +982,15 @@ function renderLesson(lesson, nowMinutes, kind) {
   body.append(el('div', 'lesson__subject', lesson.subject));
 
   const meta = el('div', 'lesson__meta');
-  if (kind === 'teacher') meta.append(el('span', 'lesson__group', lesson.group));
+  // Не повторяем то, что написано в заголовке экрана: на странице группы
+  // не нужна группа, на странице преподавателя — фамилия, в кабинете — номер.
+  if (kind !== 'group') meta.append(el('span', 'lesson__group', lesson.group));
   if (lesson.teacher && kind !== 'teacher') meta.append(el('span', 'lesson__teacher', lesson.teacher));
-  if (lesson.room) meta.append(el('span', 'lesson__room', lesson.room));
+  if (lesson.room && kind !== 'room') meta.append(el('span', 'lesson__room', lesson.room));
   // Корпус пишем только когда он чужой для группы — так же, как это делают
   // в самих таблицах. Писать его у каждой пары значило бы зашумить экран
   // ради сведения, которое студент и так знает.
-  if (awayBuilding(lesson)) {
+  if (kind !== 'room' && awayBuilding(lesson)) {
     meta.append(el('span', 'badge badge--building', `${lesson.building} корпус`));
   }
   if (lesson.subgroup) meta.append(el('span', 'badge badge--sub', `${lesson.subgroup}-я подгруппа`));
@@ -1033,9 +1144,12 @@ async function route() {
   switch (parts[0]) {
     case 'student': return renderPicker('group');
     case 'teacher': return renderPicker('teacher');
+    case 'rooms': return renderPicker('room');
     case 'info': return renderInfo();
     case 'g': return renderSchedule('group', decodeURIComponent(parts[1] || ''));
     case 't': return renderSchedule('teacher', decodeURIComponent(parts[1] || ''));
+    case 'r': return renderSchedule('room',
+      roomKey(Number(parts[1]) || 1, decodeURIComponent(parts[2] || '')));
     default: return renderHome();
   }
 }

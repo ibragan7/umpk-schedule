@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Расписание УМПК">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- ?v меняем, когда нужно наверняка выбить старую версию из кэша телефона -->
-<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
 <script>
   // Тему ставим до отрисовки, иначе на тёмном экране мигнёт белым.
   try {
@@ -146,6 +146,11 @@
         <h2 class="card__title">Я преподаватель</h2>
         <p class="card__text">Личное расписание пар</p>
       </a>
+      <a class="card card--rooms" href="#/rooms">
+        <svg class="card__icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M56,24 H200 V216 H56 Z M72,40 V200 H184 V40 Z M156,112 H172 V144 H156 Z M32,224 H224 V240 H32 Z"/></svg>
+        <h2 class="card__title">Аудитории</h2>
+        <p class="card__text">Кто занимает кабинет</p>
+      </a>
     </div>
     <p class="hero__note" id="home-note"></p>
     <p class="hero__updated" id="home-updated" hidden></p>
@@ -209,6 +214,6 @@
   </section>
 </template>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

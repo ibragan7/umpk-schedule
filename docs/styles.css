@@ -244,7 +244,7 @@ button { font: inherit; }
 .hero__note { margin-top: 22px; text-align: center; color: var(--ink-3); font-size: 14px; }
 .hero__updated { margin-top: 6px; text-align: center; color: var(--ink-3); font-size: 13px; opacity: .75; }
 
-.cards { display: grid; gap: 16px; }
+.cards { --cards-gap: 16px; display: grid; gap: var(--cards-gap); }
 
 .card {
   display: block;
@@ -637,6 +637,14 @@ button { font: inherit; }
 
 @media (min-width: 640px) {
   .cards { grid-template-columns: 1fr 1fr; }
+  /* Третья карточка встаёт под первыми двумя и по центру: «кто я» — верхний
+     ряд, а кабинеты отвечают на другой вопрос. Ширина как у колонки, иначе
+     ряд выглядел бы разъехавшимся. На телефоне карточки идут одна за другой. */
+  .card--rooms {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: calc(50% - var(--cards-gap) / 2);   /* ровно как одна колонка */
+  }
   .lesson { grid-template-columns: 70px 1fr; padding: 16px 22px; }
   .day__head { padding: 18px 22px; }
 }
@@ -659,7 +667,7 @@ button { font: inherit; }
   .hero { text-align: center; padding-top: 20px; }
   /* карточки на широком экране по центру — «Недавние» тоже */
   .hero .recent { justify-content: center; }
-  .cards { gap: 24px; max-width: 900px; margin: 0 auto; }
+  .cards { --cards-gap: 24px; max-width: 900px; margin: 0 auto; }
   .card { padding: 34px 32px 30px; }
 
   .picker__title, .schedule__name, .info h1 { font-size: 30px; }

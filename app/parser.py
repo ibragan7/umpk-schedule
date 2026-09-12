@@ -25,8 +25,8 @@ from datetime import date, timedelta
 
 import openpyxl
 
-from .config import (FIRST_BUILDING_SPECS, GROUP_RENAMES, SECOND_BUILDING_SPECS,
-                     SHEET_PREFERENCE, UNKNOWN_SPEC_BUILDING)
+from .config import (FIRST_BUILDING_SPECS, GROUP_RENAMES, ROOM_RENAMES,
+                     SECOND_BUILDING_SPECS, SHEET_PREFERENCE, UNKNOWN_SPEC_BUILDING)
 
 log = logging.getLogger(__name__)
 
@@ -79,10 +79,11 @@ def split_place(group: str, room: str) -> tuple[int, str]:
     в чужом здании. «2 корпус» без номера оставляет кабинет пустым: здание
     известно, комната нет.
     """
-    room = room.strip()
+    room = ROOM_RENAMES.get(room.strip(), room.strip())
     mark = BUILDING_MARK_RE.match(room)
     if mark:
-        return int(mark.group(1)), room[mark.end():].strip()
+        tail = room[mark.end():].strip()
+        return int(mark.group(1)), ROOM_RENAMES.get(tail, tail)
     spec = group_spec(group)
     if spec in FIRST_BUILDING_SPECS:
         return 1, room
