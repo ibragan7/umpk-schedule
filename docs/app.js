@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v12';
+const SITE_VERSION = 'umpk-v13';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const PINNED_KEY = 'umpk.pinned.v1';
@@ -789,8 +789,6 @@ function renderWeekPicker(box, list, active, onPick) {
 
 function renderDays(container, data, view) {
   const todayIso = isoDate(new Date());
-  const badge = document.getElementById('week-badge');
-  if (badge && data.days.length) badge.textContent = `${data.days[0].week}-я неделя`;
 
   if (!data.found) {
     container.replaceChildren(el('div', 'empty',

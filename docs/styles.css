@@ -7,7 +7,6 @@
   --blue-600: #2563eb;
   --blue-100: #e8edfd;
   --on-accent: #ffffff;
-  --green-100: #e8f7ea;
   --green-ink: #1f6e2b;
 
   --ink: #17233c;
@@ -47,7 +46,6 @@
   --blue-600: #9bb4ff;
   --blue-100: #1c2748;
   --on-accent: #0d1420;
-  --green-100: #16301f;
   --green-ink: #7cc98d;
 
   --ink: #dfe6f4;
@@ -81,7 +79,6 @@
     --blue-600: #9bb4ff;
     --blue-100: #1c2748;
     --on-accent: #0d1420;
-    --green-100: #16301f;
     --green-ink: #7cc98d;
 
     --ink: #dfe6f4;
@@ -407,7 +404,6 @@ button { font: inherit; }
   background: var(--blue-100);
   color: var(--blue);
 }
-.badge--week { background: var(--green-100); color: var(--green-ink); }
 .badge--sub { background: var(--sub-bg); color: var(--sub-ink); }
 .badge--note { background: var(--note-bg); color: var(--note-ink); }
 .badge--building { background: var(--place-bg); color: var(--place-ink); }
