@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Расписание УМПК">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- ?v меняем, когда нужно наверняка выбить старую версию из кэша телефона -->
-<link rel="stylesheet" href="styles.css?v=11">
+<link rel="stylesheet" href="styles.css?v=12">
 <script>
   // Тему ставим до отрисовки, иначе на тёмном экране мигнёт белым.
   try {
@@ -130,8 +130,8 @@
   <section class="hero">
     <h1 class="visually-hidden">Расписание занятий УМПК</h1>
 
-    <div class="recent" id="home-recent" hidden>
-      <span class="recent__label">Недавние:</span>
+    <div class="recent" id="home-pinned" hidden>
+      <span class="recent__label">Закреплённые:</span>
       <div class="recent__items"></div>
     </div>
 
@@ -184,13 +184,24 @@
     <header class="schedule__head">
       <h1 class="schedule__name"></h1>
       <span class="badge badge--week" id="week-badge"></span>
-      <button class="share" id="share-btn" type="button" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v12M8 6.5 12 3l4 3.5"/>
-          <path d="M5 13v6.5h14V13"/>
-        </svg>
-        <span class="share__text">Поделиться</span>
-      </button>
+      <div class="schedule__actions">
+        <button class="act" id="pin-btn" type="button" hidden aria-pressed="false">
+          <svg class="act__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12.00 3.40 L14.09 9.13 L20.18 9.34 L15.38 13.10 L17.05 18.96 L12.00 15.55 L6.95 18.96 L8.62 13.10 L3.82 9.34 L9.91 9.13 Z"/>
+          </svg>
+          <span class="visually-hidden" id="pin-text">Закрепить на главной</span>
+        </button>
+        <button class="act" id="share-btn" type="button" hidden>
+          <svg class="act__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12M8 6.5 12 3l4 3.5"/>
+            <path d="M5 13v6.5h14V13"/>
+          </svg>
+          <svg class="act__done" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m5 12.5 4.5 4.5L19 7.5"/>
+          </svg>
+          <span class="visually-hidden share__text">Поделиться</span>
+        </button>
+      </div>
     </header>
 
     <div class="tabs" role="tablist">
@@ -214,6 +225,6 @@
   </section>
 </template>
 
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

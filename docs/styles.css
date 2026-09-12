@@ -360,25 +360,43 @@ button { font: inherit; }
 }
 .schedule__name { margin: 0; font-size: 26px; font-weight: 800; color: var(--blue); }
 
-/* кнопка «Поделиться» — отдаёт расписание дня картинкой */
-.share {
-  display: inline-flex; align-items: center; gap: 7px;
-  margin-left: auto;
-  padding: 7px 14px;
+/* Две круглые кнопки справа от названия: закрепить на главной и отдать
+   расписание дня картинкой. Подписей нет — они увели бы заголовок на две
+   строки на телефоне; текст остался для чтения с экрана и во всплывающей
+   подсказке. */
+.schedule__actions { margin-left: auto; display: flex; gap: 8px; }
+
+.act {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink-2);
-  font-size: 14px; font-weight: 600; cursor: pointer;
+  cursor: pointer;
   box-shadow: var(--shadow);
+  transition: color .15s, border-color .15s;
 }
-.share svg {
-  width: 16px; height: 16px;
+.act svg {
+  width: 18px; height: 18px;
   fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
 }
-.share:hover:not(:disabled) { color: var(--blue); border-color: var(--blue-600); }
-.share:disabled { opacity: .6; cursor: default; }
+.act:hover:not(:disabled) { color: var(--blue); border-color: var(--blue-600); }
+.act:disabled { cursor: default; }
+
+/* Закреплено — звезда становится сплошной: видно с одного взгляда. */
+.act--pinned { color: var(--blue); border-color: var(--blue-600); }
+.act--pinned .act__icon { fill: currentColor; }
+
+/* Пока картинка готовится и сразу после — кнопка отвечает значком,
+   раз текста на ней больше нет. */
+.act__done { display: none; }
+.act--done .act__icon { display: none; }
+.act--done .act__done { display: block; }
+.act--done { color: var(--green-ink); border-color: var(--green-ink); }
+.act--busy { opacity: .6; }
+.act--error { color: var(--note-ink); border-color: var(--note-ink); }
 
 .badge {
   display: inline-block;

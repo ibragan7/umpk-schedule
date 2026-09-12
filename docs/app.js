@@ -11,11 +11,15 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v11';
+const SITE_VERSION = 'umpk-v12';
 
 const RECENT_KEY = 'umpk.recent.v1';
+const PINNED_KEY = 'umpk.pinned.v1';
 const THEME_KEY = 'umpk.theme';
 const MAX_RECENT = 3;
+// Закреплённых обычно одна-две. Предел нужен не человеку, а чтобы список
+// на главной не разросся, если по нему кто-то пройдётся подряд.
+const MAX_PINNED = 12;
 
 /* ----------------------------------------------------------- утилиты ---- */
 
@@ -258,6 +262,27 @@ function pushRecent(kind, name) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT))); } catch { /* приватный режим */ }
 }
 
+function readPinned() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PINNED_KEY));
+    return Array.isArray(stored) ? stored : [];
+  } catch { return []; }
+}
+
+const isPinned = (kind, name) =>
+  readPinned().some((item) => item.kind === kind && item.name === name);
+
+/** Переключает закрепление и возвращает новое состояние. */
+function togglePinned(kind, name) {
+  const rest = readPinned().filter((item) => !(item.kind === kind && item.name === name));
+  const pinning = rest.length === readPinned().length;
+  if (pinning) rest.unshift({ kind, name });
+  try {
+    localStorage.setItem(PINNED_KEY, JSON.stringify(rest.slice(0, MAX_PINNED)));
+  } catch { /* приватный режим */ }
+  return pinning;
+}
+
 const routeFor = (kind, name) => {
   if (kind === 'room') {
     const { building, room } = parseRoomKey(name);
@@ -459,7 +484,9 @@ function renderHome() {
     updated.hidden = false;
   }
 
-  fillRecent(document.getElementById('home-recent'), readRecent());
+  // На главной — закреплённое. «Недавние» остались на экранах выбора:
+  // там они к месту, а здесь человек хочет не последнее, а своё.
+  fillRecent(document.getElementById('home-pinned'), readPinned());
 }
 
 function fillRecent(box, items) {
@@ -643,19 +670,45 @@ async function renderSchedule(kind, name) {
   let shareDayData = null;
   let view = sessionStorage.getItem('umpk.view') || 'today';
 
+  // Текста на кнопке больше нет, поэтому о ходе дела она сообщает значком
+  // и подсказкой: галочка — получилось, красный контур — нет.
+  const sayShare = (text, state) => {
+    shareText.textContent = text;
+    shareButton.title = text;
+    shareButton.setAttribute('aria-label', text);
+    shareButton.classList.toggle('act--busy', state === 'busy');
+    shareButton.classList.toggle('act--done', state === 'done');
+    shareButton.classList.toggle('act--error', state === 'error');
+  };
+  sayShare('Поделиться');
+
   shareButton.addEventListener('click', async () => {
     if (!shareDayData || shareButton.disabled) return;
     shareButton.disabled = true;
-    shareText.textContent = 'Готовим…';
+    sayShare('Готовим…', 'busy');
     try {
       const how = await shareDay(shareDayData, label, kind);
-      shareText.textContent = how === 'downloaded' ? 'Сохранено' : 'Поделиться';
+      sayShare(how === 'downloaded' ? 'Картинка сохранена' : 'Готово', 'done');
     } catch (error) {
-      shareText.textContent = 'Не вышло';
+      sayShare('Не вышло', 'error');
       console.error('Поделиться не получилось:', error);
     }
-    setTimeout(() => { shareText.textContent = 'Поделиться'; shareButton.disabled = false; }, 2500);
+    setTimeout(() => { sayShare('Поделиться'); shareButton.disabled = false; }, 2500);
   });
+
+  const pinButton = document.getElementById('pin-btn');
+  const pinText = document.getElementById('pin-text');
+  const showPinned = (pinned) => {
+    const text = pinned ? 'Открепить от главной' : 'Закрепить на главной';
+    pinText.textContent = text;
+    pinButton.title = text;
+    pinButton.setAttribute('aria-label', text);
+    pinButton.setAttribute('aria-pressed', String(pinned));
+    pinButton.classList.toggle('act--pinned', pinned);
+  };
+  showPinned(isPinned(kind, name));
+  pinButton.hidden = false;
+  pinButton.addEventListener('click', () => showPinned(togglePinned(kind, name)));
 
   const load = () => {
     const now = new Date();
