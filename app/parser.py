@@ -25,7 +25,8 @@ from datetime import date, timedelta
 
 import openpyxl
 
-from .config import GROUP_RENAMES, SHEET_PREFERENCE
+from .config import (FIRST_BUILDING_SPECS, GROUP_RENAMES, SECOND_BUILDING_SPECS,
+                     SHEET_PREFERENCE, UNKNOWN_SPEC_BUILDING)
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,40 @@ BAD_MERGE_RE = re.compile(
 )
 
 
+# «2 корпус», «2кор. 110», «2 кор. ДАР2» — пометка, что занятие в другом здании.
+BUILDING_MARK_RE = re.compile(r"^([12])\s*кор(?:пус)?\.?\s*", re.I)
+
+
+def group_spec(group: str) -> str:
+    """Специальность из названия группы: «3 ПК Б» -> «ПК»."""
+    match = re.match(r"\d\s+(.+?)(?:\s+[А-Я])?$", group.strip())
+    return match.group(1) if match else group.strip()
+
+
+def split_place(group: str, room: str) -> tuple[int, str]:
+    """Корпус и номер кабинета.
+
+    Номера в двух корпусах совпадают, поэтому кабинет — это пара значений,
+    а не одна строка. Обычно корпус берём по специальности группы; явная
+    пометка вида «2 кор. 110» перевешивает — так в таблице отмечают занятия
+    в чужом здании. «2 корпус» без номера оставляет кабинет пустым: здание
+    известно, комната нет.
+    """
+    room = room.strip()
+    mark = BUILDING_MARK_RE.match(room)
+    if mark:
+        return int(mark.group(1)), room[mark.end():].strip()
+    spec = group_spec(group)
+    if spec in FIRST_BUILDING_SPECS:
+        return 1, room
+    return UNKNOWN_SPEC_BUILDING if spec not in SECOND_BUILDING_SPECS else 2, room
+
+
+def building_of_group(group: str) -> int:
+    """Корпус, в котором группа учится обычно."""
+    return split_place(group, "")[0]
+
+
 @dataclass(frozen=True)
 class Lesson:
     group: str
@@ -72,6 +107,14 @@ class Lesson:
     subgroup: int | None = None
     note: str = ""     # «Замена» или текст из строки преподавателя, не похожий на ФИО
     source: str = ""
+    building: int = 0  # 1 или 2; выводится из группы и пометки в клетке
+
+    def __post_init__(self):
+        # Корпус и кабинет — одно целое, и разбирать их порознь в каждом месте,
+        # где создаётся занятие, значит рано или поздно забыть. Считаем здесь.
+        building, room = split_place(self.group, self.room)
+        object.__setattr__(self, "building", building)
+        object.__setattr__(self, "room", room)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -395,6 +438,14 @@ def parse_workbook(data: bytes, source: str) -> ParseResult:
         for _, name in groups:
             if name not in group_names:
                 group_names.append(name)
+            spec = group_spec(name)
+            if spec not in FIRST_BUILDING_SPECS and spec not in SECOND_BUILDING_SPECS:
+                message = (f"{source}: специальность «{spec}» не указана ни в одном корпусе "
+                           f"(config.py) — занятия отнесены к {UNKNOWN_SPEC_BUILDING} корпусу. "
+                           f"Кабинеты могут перепутаться с одноимёнными в другом здании.")
+                if message not in warnings:
+                    log.warning(message)
+                    warnings.append(message)
 
         for first, last, weekday, day in _day_blocks(ws):
             if day:

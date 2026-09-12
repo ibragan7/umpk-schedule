@@ -18,7 +18,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from app import cloud                                  # noqa: E402
 from app.config import RAW_DIR                         # noqa: E402
-from app.parser import WEEKDAY_NAMES, parse_workbook   # noqa: E402
+from app.parser import WEEKDAY_NAMES, building_of_group, parse_workbook   # noqa: E402
 
 
 def collect() -> list[tuple[str, bytes]]:
@@ -102,7 +102,17 @@ def main() -> int:
         for text, count in notes.most_common(10):
             print(f"  {count:>4} × {text}")
 
-    print(f"\nБез аудитории: {sum(1 for l in lessons if not l.room)} из {len(lessons)}")
+    # «2 корпус» без номера — это не пропуск: здание известно, комната нет.
+    # Считать их вместе с настоящими пропусками значит прятать и те, и другие.
+    no_room = [l for l in lessons if not l.room]
+    # Корпус отличается от домашнего только когда в клетке стояла явная
+    # пометка «2 корпус» — по ней и отличаем «здание известно, комнаты нет»
+    # от честного пропуска аудитории.
+    only_building = sum(1 for l in no_room if l.building != building_of_group(l.group))
+    print("")
+    print(f"Без аудитории: {len(no_room)} из {len(lessons)}"
+          + (f" (из них {only_building} — «2 корпус» без номера комнаты)"
+             if only_building else ""))
     print(f"Без преподавателя: {sum(1 for l in lessons if not l.teacher and l.pair)} "
           f"(не считая классных часов)")
 

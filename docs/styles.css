@@ -26,6 +26,8 @@
   --sub-ink: #a35b00;
   --note-bg: #fdeaea;
   --note-ink: #b3261e;
+  --place-bg: #ece8fb;       /* занятие в чужом корпусе */
+  --place-ink: #5b3fc4;
 
   --radius: 18px;
   --radius-sm: 12px;
@@ -64,6 +66,8 @@
   --sub-ink: #f0b96b;
   --note-bg: #3a1d1d;
   --note-ink: #f09b95;
+  --place-bg: #2b2545;
+  --place-ink: #b3a4f0;
 
   --shadow: 0 1px 2px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .35);
   --shadow-hover: 0 2px 4px rgba(0, 0, 0, .35), 0 16px 40px rgba(0, 0, 0, .50);
@@ -96,6 +100,8 @@
     --sub-ink: #f0b96b;
     --note-bg: #3a1d1d;
     --note-ink: #f09b95;
+    --place-bg: #2b2545;
+    --place-ink: #b3a4f0;
 
     --shadow: 0 1px 2px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .35);
     --shadow-hover: 0 2px 4px rgba(0, 0, 0, .35), 0 16px 40px rgba(0, 0, 0, .50);
@@ -386,6 +392,7 @@ button { font: inherit; }
 .badge--week { background: var(--green-100); color: var(--green-ink); }
 .badge--sub { background: var(--sub-bg); color: var(--sub-ink); }
 .badge--note { background: var(--note-bg); color: var(--note-ink); }
+.badge--building { background: var(--place-bg); color: var(--place-ink); }
 
 /* вкладки «дата · дата · неделя» */
 .tabs {

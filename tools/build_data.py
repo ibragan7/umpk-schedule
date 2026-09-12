@@ -27,7 +27,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from app import cloud                                              # noqa: E402
 from app.config import DEFAULT_ANCHOR, RAW_DIR, SITE_DATA_FILE     # noqa: E402
-from app.parser import natural_group_key, parse_workbook           # noqa: E402
+from app.parser import building_of_group, natural_group_key, parse_workbook           # noqa: E402
 
 
 def collect() -> dict:
@@ -77,6 +77,9 @@ def collect() -> dict:
         "updated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "anchor_monday": (anchor or DEFAULT_ANCHOR).isoformat(),
         "groups": sorted(set(groups), key=natural_group_key),
+        # Домашний корпус каждой группы. Нужен сайту, чтобы отмечать занятие
+        # в чужом здании — и не писать корпус там, где он и так очевиден.
+        "buildings": {name: building_of_group(name) for name in sorted(set(groups))},
         "teachers": sorted(teachers),
         "weeks": [{"monday": m.isoformat(), "week": w} for m, w in sorted(mondays.items())],
         "files": files,

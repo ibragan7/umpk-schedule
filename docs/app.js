@@ -11,7 +11,7 @@ const App = {
 
 // Поднимается вручную при заметных правках сайта — по нему видно,
 // подхватило ли устройство новую версию. Показывается в «О расписании».
-const SITE_VERSION = 'umpk-v9';
+const SITE_VERSION = 'umpk-v10';
 
 const RECENT_KEY = 'umpk.recent.v1';
 const THEME_KEY = 'umpk.theme';
@@ -846,6 +846,13 @@ async function shareDay(day, title, kind) {
   return 'downloaded';
 }
 
+/** Занятие идёт в чужом для группы корпусе — значит, надо предупредить. */
+function awayBuilding(lesson) {
+  const home = App.meta && App.meta.buildings ? App.meta.buildings[lesson.group] : null;
+  return home && lesson.building && lesson.building !== home;
+}
+
+
 function renderLesson(lesson, nowMinutes, kind) {
   // nowMinutes < 0 — день не сегодняшний, отмечать нечего.
   const range = lessonRange(lesson.time);
@@ -869,6 +876,12 @@ function renderLesson(lesson, nowMinutes, kind) {
   if (kind === 'teacher') meta.append(el('span', 'lesson__group', lesson.group));
   if (lesson.teacher && kind !== 'teacher') meta.append(el('span', 'lesson__teacher', lesson.teacher));
   if (lesson.room) meta.append(el('span', 'lesson__room', lesson.room));
+  // Корпус пишем только когда он чужой для группы — так же, как это делают
+  // в самих таблицах. Писать его у каждой пары значило бы зашумить экран
+  // ради сведения, которое студент и так знает.
+  if (awayBuilding(lesson)) {
+    meta.append(el('span', 'badge badge--building', `${lesson.building} корпус`));
+  }
   if (lesson.subgroup) meta.append(el('span', 'badge badge--sub', `${lesson.subgroup}-я подгруппа`));
   if (lesson.note) meta.append(el('span', 'badge badge--note', lesson.note));
 
@@ -1081,6 +1094,7 @@ function buildMeta(data) {
   return {
     ready: true,
     groups: data.groups,
+    buildings: data.buildings || {},
     teachers: data.teachers,
     current_week: weekNumber(new Date()),
     built_on: data.built_on,
